@@ -5,15 +5,12 @@
 namespace runline {
 namespace {
 
-/// How far a box may be inside something and still only be touching it.
-constexpr float TOUCH = 1e-4f;
-
-struct AxisHit { float t; Vec3 normal; };
+struct SlabHit { float t; Vec3 normal; };
 
 /// Sweep a box against one axis-aligned box: (fraction, normal) of the first contact. The
 /// usual slab test on the box grown by `half`, with the overlap judged strictly (TOUCH): a
 /// box only touching sideways is passed, one touching ahead is hit at once.
-std::optional<AxisHit> SweepAabb(const Aabb& b, Vec3 half, Vec3 c, Vec3 delta) {
+std::optional<SlabHit> SweepAabb(const Aabb& b, Vec3 half, Vec3 c, Vec3 delta) {
     const Vec3 lo = b.min - half;
     const Vec3 hi = b.max + half;
     float enterS = -std::numeric_limits<float>::infinity();
@@ -44,7 +41,7 @@ std::optional<AxisHit> SweepAabb(const Aabb& b, Vec3 half, Vec3 c, Vec3 delta) {
     if (normal == Vec3{} || enterS >= exitS || enterS >= 1.0f || exitS <= 0.0f || enterS <= 0.0f)
         return std::nullopt;
     const float t = FMax(enter, 0.0f);
-    if (t < 1.0f) return AxisHit{t, normal};
+    if (t < 1.0f) return SlabHit{t, normal};
     return std::nullopt;
 }
 

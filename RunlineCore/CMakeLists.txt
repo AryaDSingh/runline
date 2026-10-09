@@ -3,7 +3,7 @@ project(RunlineCore CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_library(RunlineCore STATIC src/BoxWorld.cpp)
+add_library(RunlineCore STATIC src/BoxWorld.cpp src/Move.cpp)
 target_include_directories(RunlineCore PUBLIC include)
 if(MSVC)
   target_compile_options(RunlineCore PRIVATE /W4 /fp:strict)
@@ -16,7 +16,7 @@ FetchContent_Declare(doctest
 FetchContent_MakeAvailable(doctest)
 
 add_executable(RunlineCoreTests
-  tests/test_main.cpp tests/vec3_tests.cpp tests/world_tests.cpp tests/golden_tests.cpp)
+  tests/test_main.cpp tests/vec3_tests.cpp tests/world_tests.cpp tests/golden_tests.cpp tests/move_tests.cpp)
 target_link_libraries(RunlineCoreTests PRIVATE RunlineCore doctest::doctest)
 target_compile_definitions(RunlineCoreTests PRIVATE
   RUNLINE_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden")

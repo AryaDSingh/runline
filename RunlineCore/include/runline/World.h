@@ -8,6 +8,15 @@ namespace runline {
 // World: sweep the player's box through it (first contact, with the surface normal) and ask
 // whether a box is clear. Those are the two questions an engine's physics answers natively.
 
+/// How far a box may be inside something and still only be touching it.
+inline constexpr float TOUCH = 1e-4f;
+/// How far a box may have sunk into a triangle surface and still be held by it (MeshWorld).
+inline constexpr float SKIN = 0.05f;
+/// How high a lip in the floor the box is lifted over (SlideMove).
+inline constexpr float LIP = 0.05f;
+/// Surfaces whose normal points at least this far up are ground you can walk on (about 45 degrees).
+inline constexpr float WALKABLE = 0.7f;
+
 struct Aabb {
     Vec3 min, max;
 
