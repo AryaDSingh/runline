@@ -53,7 +53,7 @@ Unreal/Faith/       UE5 project
 ## 4. Testing
 
 1. **Ported unit and route tests:** `tests.rs`, `course_tests.rs`, `rooftops_tests.rs`, `moves_tests.rs`, `springboard_tests.rs` and `mesh_tests.rs`, rewritten as doctest cases.
-2. **Golden traces:** for each scripted test, record the Rust controller's state every frame (feet, velocity, state). The C++ port must match within a small tolerance, around 1e-4 m. Any difference names the first frame and field that differ.
+2. **Golden traces:** for each scripted test, record the Rust controller's state every frame (feet, velocity, state). The C++ port must match within a tolerance: 1e-5 for single collision queries (M0), and 1e-4 m per field for whole-controller traces, where per-frame error can build up. Any difference names the first frame and field that differ.
 3. **One command** (`scripts/test.ps1`) builds FaithCore and runs everything, with no Unreal needed.
 4. **In Unreal:** a few automation tests that load the greybox map and run scripted inputs through the real component. These check the adapter, not the logic.
 5. **Feel:** checked only by playtesting (you, plus 3–5 classmates at M3).
@@ -63,7 +63,7 @@ Unreal/Faith/       UE5 project
 | # | Weeks | Deliverable |
 |---|---|---|
 | M0 | 1 | Git and LFS repo, UE 5.7 C++ project, CMake FaithCore skeleton, doctest, `CLAUDE.md`, `CREDITS.md`. Rust installed, faith-runner builds, the golden-trace tool writes traces. |
-| M1 | 2–4 | FaithCore: World, BoxWorld and collide-and-slide, locomotion, jump and landing, vault and step-up, wallrun, wallclimb, ledge, slide, roll, 180 turn and kick. All their tests and golden traces pass. |
+| M1 | 2–4 | FaithCore: World, BoxWorld, MeshWorld (triangle scenes, needed for `mesh_tests`) and collide-and-slide, locomotion, jump and landing, vault and step-up, wallrun, wallclimb, ledge, slide, roll, 180 turn and kick. All their tests and golden traces pass. |
 | M2 | 4–6 | In Unreal: the component, FUnrealWorld, Enhanced Input (keyboard and controller), CameraFx, template first-person arms, and faith-runner's Rooftops map imported by script. |
 | M3 | 7–8 | **Checkpoint:** feel pass, playtests, clip, short write-up. Go/no-go. |
 | M4 | 9–12 | The remaining ported moves (springboard, swing, zipline, balance, coil, dodge, barge, wall-to-wall, corner shimmy), plus Reaction Time (`reaction.rs`). |
