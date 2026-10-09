@@ -6,6 +6,7 @@ mod probes;
 mod scalars;
 mod slides;
 mod sweeps;
+mod tuning;
 
 fn main() {
     let dir = common::golden_dir();
@@ -26,5 +27,6 @@ fn main() {
     common::write(&dir, "curves.csv", locomotion::curves_csv());
     common::write(&dir, "loco_accel.csv", locomotion::accel_csv());
     common::write(&dir, "loco_velocity.csv", locomotion::velocity_csv());
+    common::write(&dir, "tuning.txt", tuning::txt());
     common::write_reference(&dir);
 }
