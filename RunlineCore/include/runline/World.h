@@ -12,6 +12,12 @@ struct Aabb {
     Vec3 min, max;
 
     static Aabb New(Vec3 a, Vec3 b) { return {Vec3::Min(a, b), Vec3::Max(a, b)}; }
+    static Aabb FromCenterSize(Vec3 center, Vec3 size) {
+        const Vec3 h = size * 0.5f;
+        return New(center - h, center + h);
+    }
+    Vec3 Center() const { return (min + max) * 0.5f; }
+    Vec3 Size() const { return max - min; }
 
     /// Strict overlap (touching faces do not count).
     bool Overlaps(const Aabb& o) const {

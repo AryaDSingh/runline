@@ -86,3 +86,11 @@ TEST_CASE("a move ending inside the TOUCH band of a face does not hit") {
     auto w = Floor();   // ends 5e-5 into the floor: still only touching (enterS >= 1)
     CHECK_FALSE(w.Sweep(kHalf, {0, 1.4f, 0}, {0, -0.50005f, 0}));
 }
+
+TEST_CASE("Aabb center, size and from center/size") {
+    const Aabb a = Aabb::New({0, 0, 0}, {2, 4, 6});
+    CHECK(a.Center() == Vec3{1, 2, 3});
+    CHECK(a.Size() == Vec3{2, 4, 6});
+    CHECK(Aabb::FromCenterSize({1, 2, 3}, {2, 4, 6}).min == Vec3{0, 0, 0});
+    CHECK(Aabb::FromCenterSize({1, 2, 3}, {2, 4, 6}).max == Vec3{2, 4, 6});
+}

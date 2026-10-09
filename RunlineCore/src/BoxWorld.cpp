@@ -39,11 +39,11 @@ std::optional<AxisHit> SweepAabb(const Aabb& b, Vec3 half, Vec3 c, Vec3 delta) {
             normal = Vec3{};
             normal[a] = d > 0.0f ? -1.0f : 1.0f;   // -d.signum()
         }
-        exitS = std::min(exitS, sx);
+        exitS = FMin(exitS, sx);
     }
     if (normal == Vec3{} || enterS >= exitS || enterS >= 1.0f || exitS <= 0.0f || enterS <= 0.0f)
         return std::nullopt;
-    const float t = std::max(enter, 0.0f);
+    const float t = FMax(enter, 0.0f);
     if (t < 1.0f) return AxisHit{t, normal};
     return std::nullopt;
 }

@@ -1,70 +1,30 @@
-#include <doctest/doctest.h>
+#include "Golden.h"
 #include <cmath>
-#include <fstream>
-#include <sstream>
-#include <string>
-#include <vector>
-#include "runline/BoxWorld.h"
 using namespace runline;
 
-namespace {
-std::vector<std::vector<float>> ReadCsv(const std::string& name) {
-    std::ifstream in(std::string(RUNLINE_GOLDEN_DIR) + "/" + name);
-    std::vector<std::vector<float>> rows;
-    std::string line;
-    std::getline(in, line);  // header
-    while (std::getline(in, line)) {
-        std::vector<float> row;
-        std::stringstream ss(line);
-        std::string cell;
-        while (std::getline(ss, cell, ',')) row.push_back(std::stof(cell));
-        rows.push_back(row);
-    }
-    return rows;
-}
-
-// The scene is written by tools/golden, so it can't drift from the Rust side.
-BoxWorld LoadScene() {
-    const auto rows = ReadCsv("scene.csv");
-    REQUIRE_MESSAGE(!rows.empty(), "scene.csv missing; run cargo run in tools/golden");
-    BoxWorld w;
-    for (const auto& r : rows) {
-        REQUIRE(r.size() == 6);
-        w.Add(Aabb::New({r[0], r[1], r[2]}, {r[3], r[4], r[5]}));
-    }
-    return w;
-}
-
-const char* kFields[] = {"t", "nx", "ny", "nz", "px", "py", "pz"};
-} // namespace
-
-TEST_CASE("golden: BoxWorld::Sweep matches faith_move") {
-    const BoxWorld w = LoadScene();
-    const auto rows = ReadCsv("sweeps.csv");
-    REQUIRE_MESSAGE(rows.size() >= 1000, "sweeps.csv missing or empty; run cargo run in tools/golden");  // Review Focus 4
-    int mismatches = 0;
+TEST_CASE("golden: Rust's f32 min, max and clamp, ties included") {   // Review Focus 1
+    const auto rows = golden::Require("scalars.csv", 36, 6);
+    golden::Report rep;
     for (size_t i = 0; i < rows.size(); ++i) {
         const auto& r = rows[i];
-        REQUIRE(r.size() == 17);
-        const auto h = w.Sweep({r[0], r[1], r[2]}, {r[3], r[4], r[5]}, {r[6], r[7], r[8]});
-        const bool want = r[9] != 0.0f;
-        std::string diff;
-        if (h.has_value() != want) {
-            diff = std::string("hit: want ") + (want ? "1" : "0") + ", got " + (h ? "1" : "0");
-        } else if (want) {
-            const float got[] = {h->t, h->normal.x, h->normal.y, h->normal.z,
-                                 h->point.x, h->point.y, h->point.z};
-            for (int k = 0; k < 7 && diff.empty(); ++k) {
-                const float exp = r[10 + k];
-                const bool exact = k >= 1 && k <= 3;   // normals must match exactly
-                if (exact ? got[k] != exp : std::fabs(got[k] - exp) > 1e-5f)
-                    diff = std::string(kFields[k]) + ": want " + std::to_string(exp) + ", got " + std::to_string(got[k]);
-            }
-        }
-        if (!diff.empty() && ++mismatches <= 10)
-            MESSAGE("case " << i << " (csv line " << i + 2 << ") differs in " << diff);
+        const float got[] = {FMin(r[0], r[1]), FMax(r[0], r[1]), FClamp(r[0], 0.0f, 1.0f), FClamp(r[0], -0.0f, 0.0f)};
+        const char* names[] = {"min", "max", "clamp01", "clampz"};
+        for (int k = 0; k < 4; ++k)
+            if (!golden::Same(got[k], r[2 + k]))
+                rep.Add(i, std::string(names[k]) + ": want " + std::to_string(r[2 + k]) + ", got " + std::to_string(got[k]));
     }
-    CHECK(mismatches == 0);
+    rep.Finish();
+}
+
+TEST_CASE("golden: BoxWorld::Sweep matches faith_move") {
+    const BoxWorld w = golden::BoxScene();
+    const auto rows = golden::Require("sweeps.csv", 1000, 17);   // Review Focus 4 (M0)
+    golden::Report rep;
+    for (size_t i = 0; i < rows.size(); ++i) {
+        const auto& r = rows[i];
+        golden::CompareHit(rep, i, w.Sweep(golden::V(r, 0), golden::V(r, 3), golden::V(r, 6)), r, 9);
+    }
+    rep.Finish();
 }
 
 TEST_CASE("golden data records the faith-runner commit it came from") {
@@ -72,6 +32,6 @@ TEST_CASE("golden data records the faith-runner commit it came from") {
     std::string line;
     std::getline(in, line);
     REQUIRE_MESSAGE(line.rfind("faith-runner ", 0) == 0, "REFERENCE missing; run cargo run in tools/golden");
-    CHECK(line.size() >= 13 + 40);                         // a full 40-hex commit SHA
-    CHECK(line.find("dirty") == std::string::npos);        // made from a clean checkout
+    CHECK(line.size() >= 13 + 40);                    // a full 40-hex commit SHA
+    CHECK(line.find("dirty") == std::string::npos);   // made from a clean checkout
 }
