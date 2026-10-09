@@ -1,6 +1,6 @@
 # Faith (working title)
 
-Mirror's Edge movement ported from faith-runner (Rust) to a plain C++ core, then UE 5.7.
+Mirror's Edge movement ported from faith-runner (Rust) to a plain C++ core, then UE 5.8.
 Spec: docs/superpowers/specs/2026-10-09-faith-movement-port-design.md
 
 ## Build and test

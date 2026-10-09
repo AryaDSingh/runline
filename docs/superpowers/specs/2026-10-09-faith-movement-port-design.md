@@ -21,7 +21,7 @@ Pitch: *"I ported Mirror's Edge's movement to UE5, then designed new moves that 
 
 | Topic | Decision |
 |---|---|
-| Engine | Unreal Engine 5.7, C++ (Blueprints only for level scripting). Verse/UE6 and Bevy were considered and rejected for career relevance. |
+| Engine | Unreal Engine 5.8, C++ (Blueprints only for level scripting). Verse/UE6 and Bevy were considered and rejected for career relevance. |
 | Source | `tnrjns/faith-runner` (`crates/faith_move`, Rust). The author granted permission on 2026-10-08 to use, modify and port the code and tuning, with credit. Keep a link to the GitHub issue thread as the record. |
 | Excluded | Combat (melee, takedowns), Mirror's Edge assets, decompiled game scripts, gliding, blinks and timestop. |
 | Timeline | About 6 months at 10–15 h/week, starting the week of 2026-10-12, with a go/no-go checkpoint at about 2027-01-17 (moved from 2026-12-06 to keep M1's full scope; decided 2026-10-09). |
@@ -64,7 +64,7 @@ Unreal/Faith/       UE5 project
 
 | # | Weeks (dates) | Deliverable |
 |---|---|---|
-| M0 | 1 (Oct 12–18) | Git and LFS repo, UE 5.7 C++ project, CMake FaithCore skeleton, doctest, `CLAUDE.md`, `CREDITS.md`. Rust installed, faith_move's tests pass, the golden tool writes collision golden data. |
+| M0 | 1 (Oct 12–18) | Git and LFS repo, UE 5.8 C++ project, CMake FaithCore skeleton, doctest, `CLAUDE.md`, `CREDITS.md`. Rust installed, faith_move's tests pass, the golden tool writes collision golden data. |
 | M1 | 2–7 (Oct 19–Nov 29) | FaithCore: World, BoxWorld, MeshWorld (triangle scenes, needed for `mesh_tests`) and collide-and-slide, locomotion, jump and landing, vault and step-up, wallrun, wallclimb, ledge, slide, roll, 180 turn and kick. All their tests and golden traces pass. Split into several plans (collision, then locomotion and jump, then the wall moves, then the rest). |
 | M2 | 8–10 (Nov 30–Dec 20) | In Unreal: the component, FUnrealWorld, Enhanced Input (keyboard and controller), CameraFx, template first-person arms, and faith-runner's Rooftops map imported by script. Light weeks expected (exams). |
 | — | 11–12 (Dec 21–Jan 3) | Holiday buffer: no planned work. |
