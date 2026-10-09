@@ -316,6 +316,8 @@ private:
     void ShimmyUpdate(float dt, Vec3 n, float ledgeY, const Input& input, const World& world);
     void TraverseState(float dt, Traverse tr, const World& world);
     void MoveBy(Vec3 d, const World& world);
+    void SlideState(float dt, float t, const Input& input, const World& world);
+    void RollState(float dt, float t, const World& world);
     void CheckBarbedWire(const World& world);
     void Integrate(float dt, const World& world, bool onGround);
     void OffsetMesh(float d);

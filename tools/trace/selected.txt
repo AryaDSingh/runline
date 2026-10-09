@@ -95,3 +95,19 @@ tests__hang_then_drop__1
 tests__wallclimb_grab_and_pull_up__1
 tests__shimmy_steps_along_the_ledge__1
 tests__shimmy_round_an_outside_corner__1
+# M1d slide and roll
+# (deferred to M4: reaches start_melee) melee_tests__a_slide_kick_lands_once_its_hit_detection_comes_on__1
+rooftops_tests__r5_drop_needs_roll__1
+tests__hard_landing_vs_roll__2
+tests__jump_does_nothing_mid_slide__1
+tests__no_180_turn_mid_slide__1
+tests__roll_needs_a_late_crouch_press__1
+tests__slide_lasts_half_a_second_and_halves_speed_on_exit__1
+tests__slide_steers_toward_the_view_and_brakes_out__1
+tests__slide_under_low_bar__1
+# Runline scenarios: the roll's 0.2 s crouch window on a 6 m drop (k39 hard landing / k40 roll).
+runline_scenarios__roll_press_k38__1
+runline_scenarios__roll_press_k39__1
+runline_scenarios__roll_press_k40__1
+runline_scenarios__roll_press_k41__1
+runline_scenarios__roll_press_k42__1

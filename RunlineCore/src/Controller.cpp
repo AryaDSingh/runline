@@ -368,6 +368,8 @@ void Controller::Substep(float dt, const Input& input, const World& world) {
     else if (const auto* c = std::get_if<WallClimb>(&state)) WallClimbState(dt, c->normal, c->t, input, world);
     else if (const auto* k = std::get_if<WallClimbTurned>(&state)) WallClimbTurnedState(dt, k->normal, k->t, world);
     else if (const auto* l = std::get_if<LedgeHang>(&state)) HangState(dt, l->normal, l->ledgeY, input, world);
+    else if (const auto* sl = std::get_if<Slide>(&state)) SlideState(dt, sl->t, input, world);
+    else if (const auto* r = std::get_if<Roll>(&state)) RollState(dt, r->t, world);
     else if (const auto* tr = std::get_if<Traverse>(&state)) TraverseState(dt, *tr, world);
     else UnportedState(state, dt, input, world);
 
@@ -1063,6 +1065,60 @@ void Controller::WallClimbTurnedState(float dt, Vec3 n, float t, const World& wo
     vel = -n * 0.3f + Vec3::UnitY() * (FMin(vel.y, 0.5f) - tu.gravity * 0.25f * dt);
     state = WallClimbTurned{n, t};
     Integrate(dt, world, false);
+}
+
+// ---------------------------------------------------------------- slide / roll
+
+/// TdMove_Slide, rebuilt from the game: move input ignored; the body turns toward the view at
+/// SlideLookTurn x the angle a second and A/D turn it SlideStrafeTurn; CalcVelocity brakes it with
+/// GroundFriction x the slide's FrictionModifier; it aborts below SlideAbortSpeed or when you pull
+/// back; letting go of crouch ends it, but not inside the first SlideMinTime; jump does nothing;
+/// however it ends, the velocity is cut to SlideExitKeep.
+void Controller::SlideState(float dt, float t, const Input& input, const World& world) {
+    const Tuning& tu = tuning;
+    t = t + dt;
+    crouched = true;
+    jumpBuffer_ = 0.0f;
+    if (!Grounded(world)) {
+        vel *= tu.slideExitKeep;
+        state = Air{};
+        airTime_ = 0.0f;
+        jumpedSinceGround_ = false;
+        return;
+    }
+    const float hintSide = input.moveAxis.x > 0.3f ? 1.0f : input.moveAxis.x < -0.3f ? -1.0f : 0.0f;
+    const bool hintDown = hintSide == 0.0f && input.moveAxis.y < -0.8f;
+    const bool abort = hintDown || vel.Length() < tu.slideAbortSpeed;
+    const float d = RemEuclid(yaw - slideYaw + kPi, 2.0f * kPi) - kPi;
+    slideYaw += dt * tu.slideLookTurn * d - hintSide * tu.slideStrafeTurn * dt;
+    const Vec3 h = ForwardOf(slideYaw) * Horiz(vel).Length();
+    const float friction = tu.loco.groundFriction * tu.slideFrictionModifier;
+    vel = tu.loco.CalcVelocity(h, Vec3::Zero(), dt, 1.0f, friction);
+    const bool uncrouch = !input.crouchHeld && t >= tu.slideMinTime;
+    if (abort || uncrouch) {
+        if (uncrouch) TryStand(world);
+        vel *= tu.slideExitKeep;
+        SyncSprintCharge();
+        state = Ground{};
+        events.push_back({EventKind::SlideEnd});
+    } else {
+        state = Slide{t};
+    }
+    Integrate(dt, world, true);
+}
+
+void Controller::RollState(float dt, float t, const World& world) {
+    t = t + dt;
+    crouched = true;
+    vel.y = 0.0f;
+    if (t > tuning.rollTime) {
+        TryStand(world);
+        state = Ground{};
+    } else {
+        state = Roll{t};
+    }
+    Integrate(dt, world, true);
+    if (!Grounded(world)) state = Air{};
 }
 
 // ---------------------------------------------------------------- ledges

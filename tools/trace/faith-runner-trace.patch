@@ -53,10 +53,10 @@ index 5efc4e5..b7eb74b 100644
  mod rooftops_tests;
 diff --git a/crates/faith_move/src/runline_scenarios.rs b/crates/faith_move/src/runline_scenarios.rs
 new file mode 100644
-index 0000000..298909b
+index 0000000..c712ce8
 --- /dev/null
 +++ b/crates/faith_move/src/runline_scenarios.rs
-@@ -0,0 +1,118 @@
+@@ -0,0 +1,140 @@
 +//! (Runline trace patch) Scenarios faith-runner's own tests don't cover, recorded only so
 +//! RunlineCore's replays can check them: the jump buffer (jump pressed in the air just before
 +//! touchdown) and the walk-off coyote jump (jump pressed just after running off a ledge). They
@@ -175,6 +175,28 @@ index 0000000..298909b
 +        c.step(DT, &i, &w);
 +    }
 +}
++
++/// Dropping 6 m (a hard landing unless rolled), crouch pressed at frame `k` of the fall
++/// (touchdown is around frame 51): the roll needs the press in the last 0.2 s (TdPawn.CanSkillRoll).
++fn roll_press(k: usize) {
++    let w = floor();
++    let mut c = Controller::new(Tuning::default(), Vec3::new(0.0, 6.0, 0.0), 0.0);
++    for f in 0..90 {
++        let i = Input { crouch_pressed: f == k, crouch_held: f >= k && f < k + 5, ..Default::default() };
++        c.step(DT, &i, &w);
++    }
++}
++
++#[test]
++fn roll_press_k38() { roll_press(38) }
++#[test]
++fn roll_press_k39() { roll_press(39) }
++#[test]
++fn roll_press_k40() { roll_press(40) }
++#[test]
++fn roll_press_k41() { roll_press(41) }
++#[test]
++fn roll_press_k42() { roll_press(42) }
 diff --git a/crates/faith_move/src/trace.rs b/crates/faith_move/src/trace.rs
 new file mode 100644
 index 0000000..16191f7
