@@ -35,10 +35,6 @@ bool Controller::TryBalance(const World&) { return false; }
 // exactly when the real check matters, so it fails loudly rather than answer "no".
 bool Controller::TryAutoStepUp(const World&) { throw NotPorted("try_auto_step_up (Tuning::autoStepUp is on)"); }
 
-// NOT PORTED: controller.rs try_springboard / springboard_run_in (M4, springboard).
-bool Controller::TrySpringboard(const World&) { return false; }
-void Controller::SpringboardRunIn(float, const World&) { throw NotPorted("springboard_run_in"); }
-
 // NOT PORTED: vertigo.rs try_vertigo (M4): needs a long drop just ahead while walking.
 bool Controller::TryVertigo(const World&) { return false; }
 

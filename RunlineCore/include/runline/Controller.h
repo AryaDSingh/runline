@@ -125,6 +125,19 @@ struct Traverse {
     Vec3 exitVel{};
 };
 
+/// A springboard you've committed to but haven't reached yet: TdMove_SpringBoard runs you in to
+/// the step before the two foot plants.
+struct SpringRunIn {
+    /// A point on the step's front face, and its outward normal.
+    Vec3 face{};
+    Vec3 n{};
+    /// Where the feet go on top of the tall part, and the launch velocity.
+    Vec3 plant{};
+    Vec3 launch{};
+    float speed = 0.0f;
+    float t = 0.0f;
+};
+
 /// A shimmy along a ledge (TdMove_Grab.StartShimmy / StartShimmyAroundCorner).
 struct Shimmy {
     /// +1 to the right as you face the wall, -1 to the left.
@@ -285,8 +298,8 @@ private:
     float rumpRedo_ = 0.0f;
     float vertigoRedo_ = 0.0f;
     float climbRedo_ = 0.0f;
-    /// A committed springboard run-in (ported with the springboard).
-    bool springboard_ = false;
+    /// A committed springboard run-in.
+    std::optional<SpringRunIn> springboard_;
 
     float BodyY() const;
     void SyncSprintCharge();

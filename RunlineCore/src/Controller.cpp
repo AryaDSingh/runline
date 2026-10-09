@@ -116,7 +116,7 @@ void Controller::Respawn() {
     wallTurned_ = false;
     dodgeRedo_ = 0.0f;
     fixtureCooldown_ = 0.0f;
-    springboard_ = false;
+    springboard_.reset();
     takeoff_ = Takeoff::Other;
     chainWallruns_ = 0;
     lastJumpAt_ = spawn;
@@ -381,7 +381,7 @@ void Controller::Substep(float dt, const Input& input, const World& world) {
     const float y = BodyY();
     fallPeak_ = Is<Air>(state) ? FMax(fallPeak_, y) : y;
     if (!Is<Air>(state)) takeoff_ = Takeoff::Other;
-    if (!Is<Ground>(state)) springboard_ = false;
+    if (!Is<Ground>(state)) springboard_.reset();
 }
 
 // ---------------------------------------------------------------- ground
@@ -508,6 +508,99 @@ void Controller::Jump(float speed) {
     jumpedSinceGround_ = true;
     jumpBuffer_ = 0.0f;
     events.push_back({EventKind::Jump});
+}
+
+/// TdMove_SpringBoard.CanDoMove: a low step ahead that you'd reach within a second, with something
+/// 0.8-1.48 m high just behind it. If it fits, commit: run in, then plant a foot on each and launch.
+bool Controller::TrySpringboard(const World& world) {
+    const Tuning& tu = tuning;
+    const Vec3 fwd = ForwardOf(yaw);
+    const Body body = GetBody();
+    const float speed = HorizontalSpeed();
+    // Centre-to-step distance you can cover in CheckDistanceTime.
+    const float reach = speed * tu.springboardCheckTime;
+    if (reach <= tu.halfWidth) return false;
+    const float stepHi = tu.springboardStepHeight + tu.springboardSlack;
+    // ProbeWall only looks at the far end of its reach, so sweep it out to find the nearest face.
+    std::optional<WallProbe> hit;
+    float r = 0.05f;
+    while (r <= reach - tu.halfWidth) {
+        hit = ProbeWall(world, body, feet, fwd, r, 0.05f, stepHi);
+        if (hit) break;
+        r += 0.1f;
+    }
+    if (!hit) return false;
+    const Vec3 n = hit->n;
+    const float gap = hit->gap;
+    if (fwd.Dot(-n) < 0.6f) return false;
+    // The face straight in front of us along its normal.
+    const Vec3 face = feet - n * (gap + body.ReachToward(n));
+    const float dist = (feet - face).Dot(n);
+    if (dist < UuPerS(20.0f)) return false;
+    // The step: IntermediateFootPlantHeight, give or take 20 uu.
+    const float stepTop = ColumnTop(world, face - n * 0.05f, feet.y, feet.y + tu.springboardHi + 0.1f);
+    if (std::fabs(stepTop - feet.y - tu.springboardStepHeight) >= tu.springboardSlack) return false;
+    // Behind it, within 112 x 1.414 uu: the first thing that rises above the step.
+    const float maxLook = tu.springboardStepSpacing * 1.41421356237309504880f;   // SQRT_2
+    std::optional<std::pair<float, float>> found;
+    float d = 0.02f;
+    while (d <= maxLook) {
+        const float top = ColumnTop(world, face - n * d, feet.y, feet.y + tu.springboardHi + 0.1f);
+        if (top > stepTop + 0.05f) {
+            found = std::pair{d, top};
+            break;
+        }
+        d += 0.02f;
+    }
+    if (!found) return false;
+    const float spacing = found->first;
+    const float top = found->second;
+    const float rise = top - feet.y;
+    if (std::fabs(spacing - tu.springboardStepSpacing) >= tu.springboardSlack || rise < tu.springboardLo || rise > tu.springboardHi) return false;
+    // Room to stand on top of it.
+    Vec3 plant = face - n * (spacing + tu.halfWidth + 0.02f);
+    plant = Vec3{plant.x, top + 0.01f, plant.z};
+    const Body stand{tu.halfWidth, tu.standHeight};
+    if (!world.IsFree(stand.AabbAt(plant))) return false;
+    // StartMove / ReachedPreciseLocation: SavedInitialSpeed (at least 200 uu/s), launched along the
+    // view at max(SpringBoardJumpXYMin, that + SpringBoardJumpXYAdd), and SpringBoardJumpZ up.
+    const float saved = FMax(speed, UuPerS(200.0f));
+    const Vec3 launch = fwd * FMax(saved + tu.springboardXyAdd, tu.springboardXyMin) + Vec3::UnitY() * tu.springboardUp;
+    springboard_ = SpringRunIn{face, n, plant, launch, saved, 0.0f};
+    SpringboardRunIn(0.0f, world);
+    return true;
+}
+
+/// Run in to 120 uu before the step at 1.2 x your speed (input ignored), then the two foot plants
+/// (StepTime1 + StepTime2) as one traverse, then launch.
+void Controller::SpringboardRunIn(float dt, const World& world) {
+    if (!springboard_) return;
+    SpringRunIn sb = *springboard_;
+    const Tuning& tu = tuning;
+    sb.t += dt;
+    const float dist = (feet - sb.face).Dot(sb.n);
+    if (dist <= tu.springboardRunIn + 0.01f) {
+        springboard_.reset();
+        state = Traverse{TraverseKind::SpringBoard, feet, sb.plant, 0.0f, tu.springboardStepTime, 0.05f, sb.launch};
+        lastJumpAt_ = sb.plant;
+        events.push_back({EventKind::SpringBoard});
+        return;
+    }
+    if (sb.t > 1.5f || !Grounded(world)) {
+        // Blocked, or ran off something on the way: give up.
+        springboard_.reset();
+        return;
+    }
+    const float runSpeed = sb.speed * 1.2f;
+    vel = -sb.n * runSpeed;
+    springboard_ = sb;
+    if (dt > 0.0f) {
+        // Don't overshoot the run-in point.
+        const float step = FMin(runSpeed * dt, dist - tu.springboardRunIn);
+        const Vec3 before = feet;
+        Integrate(step / runSpeed, world, true);
+        if (Horiz(feet - before).Length() < step * 0.5f) springboard_.reset();   // something in the way
+    }
 }
 
 // ---------------------------------------------------------------- air
