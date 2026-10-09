@@ -1,5 +1,6 @@
 #include "Golden.h"
 #include "runline/Move.h"
+#include "runline/Probes.h"
 #include <cmath>
 using namespace runline;
 
@@ -31,6 +32,76 @@ void CheckMoveAxis(const World& w, const char* file) {
         rep.Vec(i, "feet", r, 7, feet);
         rep.Flag(i, "blocked", r[10], h.blocked);
         rep.Vec(i, "normal", r, 11, h.normal);
+    }
+    rep.Finish();
+}
+
+void CheckProbeWall(const World& w, const char* file) {
+    const auto rows = golden::Require(file, 1000, 16);
+    golden::Report rep;
+    for (size_t i = 0; i < rows.size(); ++i) {
+        const auto& r = rows[i];
+        const auto p = ProbeWall(w, Body{r[0], r[1]}, golden::V(r, 2), golden::V(r, 5), r[8], r[9], r[10]);
+        rep.Flag(i, "found", r[11], p.has_value());
+        if (!p || r[11] == 0.0f) continue;
+        rep.Vec(i, "n", r, 12, p->n);
+        rep.Float(i, "gap", r[15], p->gap);
+    }
+    rep.Finish();
+}
+
+void CheckTraceWall(const World& w, const char* file) {
+    const auto rows = golden::Require(file, 1000, 18);
+    golden::Report rep;
+    for (size_t i = 0; i < rows.size(); ++i) {
+        const auto& r = rows[i];
+        const auto h = TraceWall(w, Body{r[0], r[1]}, golden::V(r, 2), golden::V(r, 5), r[8], r[9]);
+        rep.Flag(i, "found", r[10], h.has_value());
+        if (!h || r[10] == 0.0f) continue;
+        rep.Vec(i, "n", r, 11, h->n);
+        rep.Vec(i, "at", r, 14, h->at);
+        rep.Float(i, "gap", r[17], h->gap);
+    }
+    rep.Finish();
+}
+
+void CheckTraceBox(const World& w, const char* file) {
+    const auto rows = golden::Require(file, 1000, 17);
+    golden::Report rep;
+    for (size_t i = 0; i < rows.size(); ++i) {
+        const auto& r = rows[i];
+        const auto h = TraceBox(w, golden::V(r, 0), golden::V(r, 3), r[6], golden::V(r, 7));
+        rep.Flag(i, "found", r[10], h.has_value());
+        if (!h || r[10] == 0.0f) continue;
+        rep.Vec(i, "at", r, 11, h->at);
+        rep.Vec(i, "normal", r, 14, h->normal);
+    }
+    rep.Finish();
+}
+
+void CheckTopsBelow(const World& w, const char* file) {
+    const auto rows = golden::Require(file, 1000, 15);
+    golden::Report rep;
+    for (size_t i = 0; i < rows.size(); ++i) {
+        const auto& r = rows[i];
+        const auto ts = TopsBelow(w, golden::V(r, 0), r[3], r[4], r[5]);
+        if (ts.size() != static_cast<size_t>(r[6])) {
+            rep.Add(i, "count: want " + std::to_string(static_cast<int>(r[6])) + ", got " + std::to_string(ts.size()));
+            continue;
+        }
+        for (size_t k = 0; k < ts.size(); ++k) rep.Float(i, "t" + std::to_string(k + 1), r[7 + k], ts[k]);
+    }
+    rep.Finish();
+}
+
+void CheckFindLedge(const World& w, const char* file) {
+    const auto rows = golden::Require(file, 1000, 13);
+    golden::Report rep;
+    for (size_t i = 0; i < rows.size(); ++i) {
+        const auto& r = rows[i];
+        const auto top = FindLedge(w, Body{r[0], r[1]}, golden::V(r, 2), golden::V(r, 5), r[8], r[9], r[10]);
+        rep.Flag(i, "found", r[11], top.has_value());
+        if (top && r[11] != 0.0f) rep.Float(i, "top", r[12], *top);
     }
     rep.Finish();
 }
@@ -72,3 +143,8 @@ TEST_CASE("golden data records the faith-runner commit it came from") {
 
 TEST_CASE("golden: SlideMove matches faith_move (boxes)") { CheckSlides(golden::BoxScene(), "slides.csv"); }
 TEST_CASE("golden: MoveAxis matches faith_move (boxes)") { CheckMoveAxis(golden::BoxScene(), "move_axis.csv"); }
+TEST_CASE("golden: ProbeWall matches faith_move (boxes)") { CheckProbeWall(golden::BoxScene(), "probe_wall.csv"); }
+TEST_CASE("golden: TraceWall matches faith_move (boxes)") { CheckTraceWall(golden::BoxScene(), "trace_wall.csv"); }
+TEST_CASE("golden: TraceBox matches faith_move (boxes)") { CheckTraceBox(golden::BoxScene(), "trace_box.csv"); }
+TEST_CASE("golden: TopsBelow matches faith_move (boxes)") { CheckTopsBelow(golden::BoxScene(), "tops_below.csv"); }
+TEST_CASE("golden: FindLedge matches faith_move (boxes)") { CheckFindLedge(golden::BoxScene(), "find_ledge.csv"); }

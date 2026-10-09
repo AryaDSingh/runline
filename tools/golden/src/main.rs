@@ -1,5 +1,6 @@
 //! Writes reference results from faith-runner's faith_move for RunlineCore's golden tests.
 mod common;
+mod probes;
 mod scalars;
 mod slides;
 mod sweeps;
@@ -14,5 +15,10 @@ fn main() {
     let anchors = sweeps::anchors();
     common::write(&dir, "slides.csv", slides::slides_csv(&boxes, &anchors, 0x511D));
     common::write(&dir, "move_axis.csv", slides::move_axis_csv(&boxes, &anchors, 0xA815));
+    common::write(&dir, "probe_wall.csv", probes::probe_wall_csv(&boxes, &anchors, 0x9B0E));
+    common::write(&dir, "trace_wall.csv", probes::trace_wall_csv(&boxes, &anchors, 0x7A11));
+    common::write(&dir, "trace_box.csv", probes::trace_box_csv(&boxes, &anchors, 0x7B0C));
+    common::write(&dir, "tops_below.csv", probes::tops_below_csv(&boxes, &anchors));
+    common::write(&dir, "find_ledge.csv", probes::find_ledge_csv(&boxes, &anchors, 0x1ED6));
     common::write_reference(&dir);
 }
