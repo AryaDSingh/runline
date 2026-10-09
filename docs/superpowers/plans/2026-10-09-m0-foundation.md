@@ -6,7 +6,7 @@
 
 **Architecture:** `FaithCore/` is a CMake static library with no Unreal dependency, tested with doctest. `tools/golden/` is a small Rust program that links faith-runner's `faith_move` crate and writes reference results to `FaithCore/tests/golden/*.csv`. The C++ tests replay those cases and compare. The Unreal project in `Unreal/Faith/` stays empty until M2.
 
-**Tech Stack:** C++20, CMake (the copy bundled with VS 2022), MSVC, doctest 2.4.11 (via FetchContent), Rust stable with cargo, Unreal Engine 5.7, Git and Git LFS, PowerShell.
+**Tech Stack:** C++20, CMake (the copy bundled with VS 2022), MSVC, doctest 2.5.3 (via FetchContent), Rust stable with cargo, Unreal Engine 5.7, Git and Git LFS, PowerShell.
 
 **Spec:** `docs/superpowers/specs/2026-10-09-faith-movement-port-design.md`
 
@@ -123,7 +123,7 @@ Mirror's Edge movement ported from faith-runner (Rust) to a plain C++ core, then
 Spec: docs/superpowers/specs/2026-10-09-faith-movement-port-design.md
 
 ## Build and test
-- `pwsh scripts/test.ps1`: configures, builds and runs all FaithCore tests (no Unreal needed).
+- `powershell -File scripts/test.ps1`: configures, builds and runs all FaithCore tests (no Unreal needed).
 - Golden data: `cargo run --release` in tools/golden (needs the reference clone at
   ../faith-runner). It rewrites FaithCore/tests/golden/*.csv; commit them.
 
@@ -171,7 +171,7 @@ endif()
 include(FetchContent)
 FetchContent_Declare(doctest
   GIT_REPOSITORY https://github.com/doctest/doctest.git
-  GIT_TAG v2.4.11)
+  GIT_TAG v2.5.3)   # 2.4.x declares cmake_minimum_required(3.0), which CMake 4 rejects
 FetchContent_MakeAvailable(doctest)
 
 add_executable(FaithCoreTests
@@ -228,7 +228,7 @@ TEST_CASE("Vec3 min, max, clamp, splat") {
 - [ ] **Step 4: Write `scripts/test.ps1`**
 
 ```powershell
-# Configure, build and run every FaithCore test. Usage: pwsh scripts/test.ps1
+# Configure, build and run every FaithCore test. Usage: powershell -File scripts/test.ps1
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $cmake = (Get-Command cmake -ErrorAction SilentlyContinue).Source
@@ -615,13 +615,14 @@ use std::fmt::Write as _;
 /// The scene, identical to kScene in FaithCore/tests/golden_tests.cpp.
 fn scene() -> BoxWorld {
     let mut w = BoxWorld::default();
-    for (a, b) in [
+    let boxes: [([f32; 3], [f32; 3]); 5] = [
         ([-10.0, -1.0, -10.0], [10.0, 0.0, 10.0]), // floor
         ([2.0, 0.0, -1.0], [3.0, 3.0, 1.0]),       // wall
         ([-4.0, 0.0, 2.0], [-2.0, 1.2, 4.0]),      // waist-high block
         ([-1.0, 2.5, -6.0], [1.0, 2.7, -3.0]),     // overhead pipe
         ([4.0, 0.0, 4.0], [4.5, 6.0, 4.5]),        // pillar
-    ] {
+    ];
+    for (a, b) in boxes {
         w.add(Aabb::new(Vec3::from(a), Vec3::from(b)));
     }
     w
@@ -647,11 +648,13 @@ fn main() {
         let half = Vec3::new(r.range(0.1, 0.5), r.range(0.3, 1.0), r.range(0.1, 0.5));
         let start = Vec3::new(r.range(-6.0, 6.0), r.range(0.0, 4.0), r.range(-6.0, 6.0));
         let delta = Vec3::new(r.axis(6.0), r.axis(4.0), r.axis(6.0));
-        let f = |v: Vec3| format!("{:.9},{:.9},{:.9}", v.x, v.y, v.z);
-        match w.sweep(half, start, delta) {
-            Some(h) => writeln!(out, "{},{},{},1,{:.9},{},{}", f(half), f(start), f(delta), h.t, f(h.normal), f(h.point)),
-            None => writeln!(out, "{},{},{},0,0,0,0,0,0,0,0", f(half), f(start), f(delta)),
-        }.unwrap();
+        // `{}` prints an f32 in its shortest exact form, so C++'s stof reads back the same bits.
+        let f = |v: Vec3| format!("{},{},{}", v.x, v.y, v.z);
+        let line = match w.sweep(half, start, delta) {
+            Some(h) => format!("{},{},{},1,{},{},{}", f(half), f(start), f(delta), h.t, f(h.normal), f(h.point)),
+            None => format!("{},{},{},0,0,0,0,0,0,0,0", f(half), f(start), f(delta)),
+        };
+        writeln!(out, "{line}").unwrap();
     }
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../FaithCore/tests/golden/sweeps.csv");
     std::fs::create_dir_all(std::path::Path::new(path).parent().unwrap()).unwrap();
@@ -671,6 +674,7 @@ Expected: `wrote .../FaithCore/tests/golden/sweeps.csv`, a file of 4001 lines.
 
 ```cpp
 #include <doctest/doctest.h>
+#include <cmath>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -734,7 +738,7 @@ TEST_CASE("golden: BoxWorld::Sweep matches faith_move") {
 Run: `powershell -File scripts/test.ps1`
 Expected: SUCCESS with 0 mismatches.
 
-Sanity check: temporarily change `TOUCH` in `BoxWorld.cpp` to `1e-3f` and run again. Expected: the golden test FAILS with mismatches. Revert the change and run again: SUCCESS.
+Sanity check: temporarily change `const float t = std::max(enter, 0.0f);` in `BoxWorld.cpp` to `std::max(enter * 0.99f, 0.0f)` and run again. Expected: the golden test FAILS with mismatches. (Don't use a `TOUCH` tweak for this: it only changes rare borderline cases, so it might not trip.) Revert the change and run again: SUCCESS.
 
 - [ ] **Step 7: Commit**
 
@@ -774,7 +778,7 @@ Then run `git lfs ls-files` and check that the `.uasset` and `.umap` files are l
 ## Done when
 
 - `powershell -File scripts/test.ps1` prints SUCCESS, with the Vec3, world and golden tests all passing.
-- Breaking `TOUCH` makes the golden test fail (Task 4, Step 6).
+- Deliberately breaking the hit fraction makes the golden test fail (Task 4, Step 6).
 - The UE project opens and plays its template level.
 - `CREDITS.md` contains the real permission-thread URL.
 
