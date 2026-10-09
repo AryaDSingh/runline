@@ -4,3 +4,5 @@ tests__sprint_builds_up__1
 tests__jump_arc_and_land__1
 tests__jump_landing_hands_back_the_boost__1
 tests__hard_landing_stops_dead__1
+# Pressed jump in the air and jumped again on touchdown (the jump buffer), on a triangle mesh.
+mesh_tests__a_hair_into_the_ground_holds__2
