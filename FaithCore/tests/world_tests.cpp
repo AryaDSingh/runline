@@ -75,3 +75,14 @@ TEST_CASE("Overlaps and IsFree") {
     CHECK(w.Overlaps(Aabb::New({0, -0.5f, 0}, {1, 0.5f, 1})));
     CHECK(w.IsFree(Aabb::New({0, 0, 0}, {1, 1, 1})));   // resting on top only
 }
+
+TEST_CASE("a box sunk inside the TOUCH band still crosses a flush seam") {
+    BoxWorld w;   // the zero-delta branch must use TOUCH, not the raw faces
+    w.Add(Aabb::New({-10, -1, -10}, {0, 0, 10})).Add(Aabb::New({0, -1, -10}, {10, 0, 10}));
+    CHECK_FALSE(w.Sweep(kHalf, {-1, 0.9f - 5e-5f, 0}, {2, 0, 0}));
+}
+
+TEST_CASE("a move ending inside the TOUCH band of a face does not hit") {
+    auto w = Floor();   // ends 5e-5 into the floor: still only touching (enterS >= 1)
+    CHECK_FALSE(w.Sweep(kHalf, {0, 1.4f, 0}, {0, -0.50005f, 0}));
+}

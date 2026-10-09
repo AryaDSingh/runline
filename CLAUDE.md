@@ -6,7 +6,8 @@ Spec: docs/superpowers/specs/2026-10-09-faith-movement-port-design.md
 ## Build and test
 - `powershell -ExecutionPolicy Bypass -File scripts/test.ps1`: configures, builds and runs all FaithCore tests (no Unreal needed).
 - Golden data: `cargo run --release` in tools/golden (needs the reference clone at
-  ../faith-runner). It rewrites FaithCore/tests/golden/*.csv; commit them.
+  ../faith-runner). It rewrites FaithCore/tests/golden/*.csv and REFERENCE (the faith-runner
+  commit used; currently 9470d755). Regenerate only from a clean checkout, and commit all three.
 
 ## Conventions
 - FaithCore: C++20, no Unreal headers. Metres, Y up. float everywhere, as in the Rust code.

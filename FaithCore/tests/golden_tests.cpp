@@ -66,3 +66,12 @@ TEST_CASE("golden: BoxWorld::Sweep matches faith_move") {
     }
     CHECK(mismatches == 0);
 }
+
+TEST_CASE("golden data records the faith-runner commit it came from") {
+    std::ifstream in(std::string(FAITH_GOLDEN_DIR) + "/REFERENCE");
+    std::string line;
+    std::getline(in, line);
+    REQUIRE_MESSAGE(line.rfind("faith-runner ", 0) == 0, "REFERENCE missing; run cargo run in tools/golden");
+    CHECK(line.size() >= 13 + 40);                         // a full 40-hex commit SHA
+    CHECK(line.find("dirty") == std::string::npos);        // made from a clean checkout
+}

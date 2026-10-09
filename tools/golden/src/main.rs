@@ -89,6 +89,7 @@ fn main() {
 
     let mut out = String::from("hx,hy,hz,sx,sy,sz,dx,dy,dz,hit,t,nx,ny,nz,px,py,pz\n");
     structured(&w, &mut out);
+    touch_band(&w, &mut out);
     let mut r = Lcg(0x5EED);
     for _ in 0..4000 {
         let half = Vec3::new(r.range(0.1, 0.5), r.range(0.3, 1.0), r.range(0.1, 0.5));
@@ -101,5 +102,50 @@ fn main() {
     std::fs::create_dir_all(dir).unwrap();
     std::fs::write(format!("{dir}/scene.csv"), scene).unwrap();
     std::fs::write(format!("{dir}/sweeps.csv"), out).unwrap();
-    println!("wrote {dir}/scene.csv and sweeps.csv");
+
+    // Record which faith-runner commit this data came from, so a regenerated file can be traced.
+    let clone = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../faith-runner");
+    let git = |args: &[&str]| {
+        std::process::Command::new("git").arg("-C").arg(clone).args(args).output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default()
+    };
+    let sha = git(&["rev-parse", "HEAD"]);
+    assert!(!sha.is_empty(), "can't read faith-runner's commit from {clone}");
+    let dirty = if git(&["status", "--porcelain"]).is_empty() { "" } else { " (dirty)" };
+    std::fs::write(format!("{dir}/REFERENCE"), format!("faith-runner {sha}{dirty}\n")).unwrap();
+    println!("wrote {dir}/scene.csv, sweeps.csv and REFERENCE (faith-runner {sha}{dirty})");
+}
+
+/// The TOUCH band (1e-4) decides hit or no hit for moves that end, or slide, a hair inside a
+/// face. Random and 0.5 m structured moves never land there; these do.
+fn touch_band(w: &BoxWorld, out: &mut String) {
+    let halves = [Vec3::new(0.3, 0.9, 0.3), Vec3::new(0.5, 0.9, 0.5)];
+    for half in halves {
+        // Moves that end exactly on a face, and 1e-5 / 5e-5 past it.
+        for (lo, hi) in SCENE {
+            let (lo, hi) = (Vec3::from(lo), Vec3::from(hi));
+            let mid = (lo + hi) * 0.5;
+            for a in 0..3 {
+                for s in [-1.0f32, 1.0] {
+                    for e in [0.0f32, 1e-5, 5e-5] {
+                        let mut start = mid;
+                        start[a] = if s < 0.0 { lo[a] - half[a] - 0.25 } else { hi[a] + half[a] + 0.25 };
+                        let mut d = Vec3::ZERO;
+                        d[a] = -s * (0.25 + e);
+                        out.push_str(&row(w, half, start, d));
+                    }
+                }
+            }
+        }
+        // Sunk into (or just above) the floor by less than TOUCH, sliding across the seam at x = 0.
+        for sink in [0.0f32, 5e-5, -5e-5] {
+            for d in [Vec3::new(2.0, 0.0, 0.0), Vec3::new(2.0, 0.0, 0.5), Vec3::new(-2.0, 0.0, 0.0)] {
+                let start = Vec3::new(-d.x.signum(), half.y - sink, 0.0);
+                out.push_str(&row(w, half, start, d));
+            }
+        }
+        // A delta component below the 1e-9 zero threshold.
+        out.push_str(&row(w, half, Vec3::new(-1.0, half.y, 0.0), Vec3::new(2.0, 1e-10, 0.0)));
+    }
 }
