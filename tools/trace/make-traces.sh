@@ -17,14 +17,19 @@ git -C "$wt" clean -fdq
 git -C "$wt" apply "$patch"
 out="$(mktemp -d)"
 ( cd "$wt" && FAITH_TRACE_DIR="$(cygpath -w "$out")" PATH="$HOME/.cargo/bin:$PATH" cargo test -q -p faith_move --release )
+# Gather the selected traces in a staging folder first, so a missing one leaves the committed
+# traces untouched.
+stage="$out/selected"
+mkdir -p "$stage"
+tr -d '\r' < "$root/tools/trace/selected.txt" | while read -r name; do   # tr: tolerate CRLF checkouts
+  { [ -z "$name" ] || [ "${name#\#}" != "$name" ]; } && continue
+  [ -f "$out/$name.trace" ] || { echo "no trace recorded for $name" >&2; exit 1; }
+  cp "$out/$name.trace" "$stage/"
+done
 dest="$root/RunlineCore/tests/golden/traces"
 mkdir -p "$dest"
 rm -f "$dest"/*.trace
-while read -r name; do
-  { [ -z "$name" ] || [ "${name#\#}" != "$name" ]; } && continue
-  [ -f "$out/$name.trace" ] || { echo "no trace recorded for $name" >&2; exit 1; }
-  cp "$out/$name.trace" "$dest/"
-done < "$root/tools/trace/selected.txt"
+cp "$stage"/*.trace "$dest/"
 printf 'faith-runner %s + trace patch %s\n' "$sha" "$(sha256sum "$patch" | cut -c1-16)" > "$dest/TRACE_REFERENCE"
-echo "recorded $(ls "$out" | wc -l) traces, kept $(ls "$dest"/*.trace | wc -l)"
+echo "recorded $(ls "$out"/*.trace | wc -l) traces, kept $(ls "$dest"/*.trace | wc -l)"
 [ -z "$(git -C "$ref" status --porcelain)" ] || { echo "reference clone is dirty" >&2; exit 1; }

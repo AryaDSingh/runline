@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <optional>
 #include <fstream>
 #include <istream>
 #include <stdexcept>
@@ -42,6 +43,8 @@ struct Frame {
     Snapshot out;
     std::vector<std::string> events;
     bool hasOut = false;
+    /// What a test set the controller to just before this step, if it changed it between steps.
+    std::optional<Snapshot> set;
 };
 
 struct Trace {
@@ -49,6 +52,11 @@ struct Trace {
     bool defaultTuning = false;
     bool hasInit = false;
     Snapshot init;
+    /// Controller::new's spawn point and yaw.
+    runline::Vec3 spawn{};
+    float spawnYaw = 0;
+    /// The starting state in full (Rust's Debug), for states with a payload.
+    std::string initStateDebug;
     std::vector<WorldDump> worlds;
     std::vector<Frame> frames;
 };
@@ -61,6 +69,11 @@ inline std::vector<std::string> Split(const std::string& s, char sep) {
         else out.back() += c;
     }
     return out;
+}
+
+/// Throws unless the record has at least `n` fields.
+inline void Need(const std::vector<std::string>& f, size_t n, const std::string& name) {
+    if (f.size() < n) throw std::runtime_error(name + ": " + f[0] + " record has " + std::to_string(f.size()) + " fields, needs " + std::to_string(n));
 }
 
 inline Snapshot ParseSnapshot(const std::vector<std::string>& f, size_t at) {
@@ -80,6 +93,7 @@ inline Trace Parse(std::istream& in, const std::string& name) {
     t.name = name;
     std::string line;
     bool inWorld = false;
+    std::optional<Snapshot> pendingSet;
     while (std::getline(in, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         if (line.empty()) continue;
@@ -88,8 +102,10 @@ inline Trace Parse(std::istream& in, const std::string& name) {
             if (line.rfind("fixture,", 0) == 0) { t.worlds.back().fixtures.push_back(line.substr(8)); continue; }
             const auto f = Split(line, ',');
             if (f[0] == "box") {
+                Need(f, 7, name);
                 t.worlds.back().boxes.push_back(runline::Aabb::New({std::stof(f[1]), std::stof(f[2]), std::stof(f[3])}, {std::stof(f[4]), std::stof(f[5]), std::stof(f[6])}));
             } else if (f[0] == "tri") {
+                Need(f, 10, name);
                 runline::Tri tri;
                 for (int k = 0; k < 3; ++k) tri[k] = {std::stof(f[1 + 3 * k]), std::stof(f[2 + 3 * k]), std::stof(f[3 + 3 * k])};
                 t.worlds.back().tris.push_back(tri);
@@ -100,11 +116,22 @@ inline Trace Parse(std::istream& in, const std::string& name) {
         }
         const auto f = Split(line, ',');
         if (f[0] == "trace") {
-            if (f.size() < 2 || f[1] != "1") throw std::runtime_error(name + ": unsupported trace version");
+            if (f.size() < 2 || f[1] != "2") throw std::runtime_error(name + ": unsupported trace version (re-run make-traces.sh)");
         } else if (f[0] == "tuning_default") {
+            Need(f, 2, name);
             t.defaultTuning = f[1] == "1";
+        } else if (f[0] == "spawn") {
+            Need(f, 5, name);
+            t.spawn = {std::stof(f[1]), std::stof(f[2]), std::stof(f[3])};
+            t.spawnYaw = std::stof(f[4]);
+        } else if (f[0] == "state_debug") {
+            t.initStateDebug = line.substr(12);
+        } else if (f[0] == "set") {
+            Need(f, 12, name);
+            pendingSet = ParseSnapshot(f, 1);
         } else if (f[0] == "init") {
             if (t.hasInit) throw std::runtime_error(name + ": two controllers in one trace");
+            Need(f, 12, name);
             t.init = ParseSnapshot(f, 1);
             t.hasInit = true;
         } else if (f[0] == "world") {
@@ -113,8 +140,11 @@ inline Trace Parse(std::istream& in, const std::string& name) {
         } else if (f[0] == "in") {
             if (!t.hasInit || t.worlds.empty()) throw std::runtime_error(name + ": input before init/world");
             if (!t.frames.empty() && !t.frames.back().hasOut) throw std::runtime_error(name + ": frame with no output");
+            Need(f, 14, name);
             Frame fr;
             fr.world = t.worlds.size() - 1;
+            fr.set = pendingSet;
+            pendingSet.reset();
             FrameInput& i = fr.in;
             i.dt = std::stof(f[1]);
             i.moveX = std::stof(f[2]);
@@ -132,6 +162,7 @@ inline Trace Parse(std::istream& in, const std::string& name) {
             t.frames.push_back(fr);
         } else if (f[0] == "out") {
             if (t.frames.empty() || t.frames.back().hasOut) throw std::runtime_error(name + ": output with no input");
+            Need(f, 12, name);
             Frame& fr = t.frames.back();
             fr.out = ParseSnapshot(f, 1);
             if (f.size() > 12 && !f[12].empty()) fr.events = Split(f[12], ';');

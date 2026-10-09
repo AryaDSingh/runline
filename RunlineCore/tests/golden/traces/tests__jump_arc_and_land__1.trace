@@ -1,6 +1,8 @@
-trace,1
+trace,2
 tuning_default,1
+spawn,0,0,0,0
 init,0,0,0,0,0,0,0,0,Ground,0,0
+state_debug,Ground
 world
 box,-50,-1,-50,50,0,50
 end_world

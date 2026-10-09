@@ -51,10 +51,10 @@ index 5efc4e5..8b8ccc1 100644
  mod rooftops_tests;
 diff --git a/crates/faith_move/src/trace.rs b/crates/faith_move/src/trace.rs
 new file mode 100644
-index 0000000..ede35e7
+index 0000000..77bb253
 --- /dev/null
 +++ b/crates/faith_move/src/trace.rs
-@@ -0,0 +1,83 @@
+@@ -0,0 +1,96 @@
 +//! (Runline trace patch) Records every Controller::step a test makes, for RunlineCore's replay
 +//! tests. Only active when FAITH_TRACE_DIR is set. Never committed to faith-runner.
 +use crate::controller::{Controller, Input};
@@ -64,8 +64,9 @@ index 0000000..ede35e7
 +use std::io::Write as _;
 +
 +thread_local! {
-+    /// Controllers seen on this test thread (numbered from 1), with the world each last wrote.
-+    static SEEN: RefCell<Vec<String>> = RefCell::new(Vec::new());
++    /// Controllers seen on this test thread (numbered from 1): the world each last wrote, and its
++    /// state after its last step (to spot a test changing it between steps).
++    static SEEN: RefCell<Vec<(String, String)>> = RefCell::new(Vec::new());
 +}
 +
 +fn dir() -> Option<String> {
@@ -98,16 +99,26 @@ index 0000000..ede35e7
 +    if c.trace_id == 0 {
 +        c.trace_id = SEEN.with(|s| {
 +            let mut s = s.borrow_mut();
-+            s.push(String::new());
++            s.push((String::new(), String::new()));
 +            s.len()
 +        });
 +        let default = format!("{:?}", c.tuning) == format!("{:?}", Tuning::default());
-+        text += &format!("trace,1\ntuning_default,{}\ninit,{}\n", b(default), snapshot(c));
++        text += &format!(
++            "trace,2\ntuning_default,{}\nspawn,{},{},{},{}\ninit,{}\nstate_debug,{:?}\n",
++            b(default), c.spawn.x, c.spawn.y, c.spawn.z, c.spawn_yaw, snapshot(c), c.state
++        );
++    } else {
++        // A test changed the controller since its last step: record what it set.
++        let now = snapshot(c);
++        let last = SEEN.with(|s| s.borrow()[c.trace_id - 1].1.clone());
++        if now != last {
++            text += &format!("set,{}\n", now);
++        }
 +    }
 +    let dump = w.dump();
 +    let changed = SEEN.with(|s| {
 +        let mut s = s.borrow_mut();
-+        let last = &mut s[c.trace_id - 1];
++        let last = &mut s[c.trace_id - 1].0;
 +        if *last != dump || text.starts_with("trace,") {
 +            *last = dump.clone();
 +            true
@@ -136,7 +147,9 @@ index 0000000..ede35e7
 +        .iter()
 +        .map(|e| format!("{:?}", e).split(|ch: char| !ch.is_alphanumeric() && ch != '_').next().unwrap_or("").to_string())
 +        .collect();
-+    append(c.trace_id, &format!("out,{},{}\n", snapshot(c), events.join(";")));
++    let now = snapshot(c);
++    SEEN.with(|s| s.borrow_mut()[c.trace_id - 1].1 = now.clone());
++    append(c.trace_id, &format!("out,{},{}\n", now, events.join(";")));
 +}
 diff --git a/crates/faith_move/src/world.rs b/crates/faith_move/src/world.rs
 index d3c3984..1b7a845 100644

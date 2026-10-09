@@ -4,9 +4,11 @@ using namespace runline;
 
 TEST_CASE("Parse reads every record kind, empty events and fixture text with commas") {   // Review Focus 3
     std::istringstream in(
-        "trace,1\n"
+        "trace,2\n"
         "tuning_default,1\n"
+        "spawn,0,1,0,0.25\n"
         "init,0,1,0,0,0,0,0,0,Air,0,0\n"
+        "state_debug,Air\n"
         "world\n"
         "box,-50,-1,-50,50,0,50\n"
         "tri,0,0,0,1,0,0,0,0,1\n"
@@ -14,12 +16,16 @@ TEST_CASE("Parse reads every record kind, empty events and fixture text with com
         "end_world\n"
         "in,0.016666668,0,1,0.1,-0.2,1,1,0,0,0,0,0,0\n"
         "out,0,0.9,0,0,-0.27,0,0.1,-0.2,Air,0,0,\n"
+        "set,0,0,0,0,0,0,1.5,-0.2,Ground,0,0\n"
         "in,0.016666668,0,0,0,0,0,0,0,0,0,0,0,0\n"
-        "out,0,0,0,0,0,0,0.1,-0.2,Ground,0,0,Land;Jump\n");
+        "out,0,0,0,0,0,0,1.5,-0.2,Ground,0,0,Land;Jump\n");
     const trace::Trace t = trace::Parse(in, "mini");
     CHECK(t.defaultTuning);
     CHECK(t.init.state == "Air");
     CHECK(t.init.feet == Vec3{0, 1, 0});
+    CHECK(t.spawn == Vec3{0, 1, 0});
+    CHECK(t.spawnYaw == 0.25f);
+    CHECK(t.initStateDebug == "Air");
     REQUIRE(t.worlds.size() == 1);
     CHECK(t.worlds[0].boxes.size() == 1);
     CHECK(t.worlds[0].tris.size() == 1);
@@ -34,16 +40,24 @@ TEST_CASE("Parse reads every record kind, empty events and fixture text with com
     CHECK(t.frames[0].events.empty());
     CHECK(t.frames[1].out.state == "Ground");
     CHECK(t.frames[1].events == std::vector<std::string>{"Land", "Jump"});
+    // A test changed the controller between steps: the frame carries what it was set to.
+    CHECK_FALSE(t.frames[0].set.has_value());
+    REQUIRE(t.frames[1].set.has_value());
+    CHECK(t.frames[1].set->yaw == 1.5f);
 }
 
-TEST_CASE("Parse rejects a file with no init or a frame with no output") {
-    std::istringstream noInit("trace,1\ntuning_default,1\nin,0.1,0,0,0,0,0,0,0,0,0,0,0,0\n");
+TEST_CASE("Parse rejects a file with no init, a frame with no output, an old version or a short record") {
+    std::istringstream noInit("trace,2\ntuning_default,1\nin,0.1,0,0,0,0,0,0,0,0,0,0,0,0\n");
     CHECK_THROWS(trace::Parse(noInit, "bad"));
-    std::istringstream noOut("trace,1\ntuning_default,1\ninit,0,0,0,0,0,0,0,0,Air,0,0\nworld\nend_world\nin,0.1,0,0,0,0,0,0,0,0,0,0,0,0\n");
+    std::istringstream noOut("trace,2\ntuning_default,1\nspawn,0,0,0,0\ninit,0,0,0,0,0,0,0,0,Air,0,0\nworld\nend_world\nin,0.1,0,0,0,0,0,0,0,0,0,0,0,0\n");
     CHECK_THROWS(trace::Parse(noOut, "bad"));
+    std::istringstream v1("trace,1\ntuning_default,1\n");
+    CHECK_THROWS(trace::Parse(v1, "old"));   // version 1 has no spawn or set records
+    std::istringstream shortIn("trace,2\ntuning_default,1\nspawn,0,0,0,0\ninit,0,0,0,0,0,0,0,0,Air,0,0\nworld\nend_world\nin,0.1,0,0\n");
+    CHECK_THROWS(trace::Parse(shortIn, "short"));   // a truncated record throws instead of reading past the end
 }
 
-TEST_CASE("every committed trace loads, and was recorded from the golden reference commit") {
+TEST_CASE("every committed trace loads, and was recorded from the golden reference commit and the committed patch") {
     const auto names = trace::All();
     REQUIRE(names.size() >= 5);
     for (const auto& n : names) {
