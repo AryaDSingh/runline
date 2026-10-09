@@ -44,16 +44,18 @@ Unreal/Faith/       UE5 project
   Input, camera, arms, greybox importer (Editor Python: builds levels from box lists)
 ```
 
-**Unit boundary.** FaithCore works in metres with Y up, as `faith_move` does. All conversion happens in one place, `FUnrealWorld` and the component. Nothing else in the Unreal layer touches raw core coordinates.
+**Unit boundary.** FaithCore works in metres with Y up, as `faith_move` does. All conversion happens in one place, `FUnrealWorld` and the component. Nothing else in the Unreal layer touches raw core coordinates. The M2 plan must write down the exact axis mapping (core x/y/z to Unreal X/Y/Z, accounting for Unreal's left-handed frame) and the yaw/pitch convention, and test both.
 
-**Fixed step.** The core always steps at 1/60 s, as faith-runner's tests do. The component accumulates frame time, runs whole steps, and interpolates the rendered position.
+**Fixed step.** The core always steps at 1/60 s, as faith-runner's tests do. The component accumulates frame time and runs whole steps. **Mouse look is not stepped:** raw yaw and pitch are applied every render frame and the accumulated look is fed to the core each step, so look never lags on high-refresh displays. Only the camera and arms are interpolated between steps; the capsule stays at the real stepped position, so Unreal-side triggers (checkpoints, time-trial gates) don't lag.
 
-**Port fidelity.** Port the Rust function by function, keeping its names and comments so the two can be compared side by side. Only make it more idiomatic where C++ forces a change: enums for move states, and `std::optional` in place of `Option`.
+**Port fidelity.** Port the Rust function by function, keeping its names and comments so the two can be compared side by side. Keep glam's order of operations (for example in `normalize` and `lerp`), because a different order changes float results. Only make it more idiomatic where C++ forces a change: enums for move states, and `std::optional` in place of `Option`.
+
+**Combat stays in the code paths.** Melee is woven through `controller.rs` (around 74 references). Port those paths but always feed the melee and takedown inputs as false, so the controller's structure, and its golden traces, stay comparable with the Rust original.
 
 ## 4. Testing
 
-1. **Ported unit and route tests:** `tests.rs`, `course_tests.rs`, `rooftops_tests.rs`, `moves_tests.rs`, `springboard_tests.rs` and `mesh_tests.rs`, rewritten as doctest cases.
-2. **Golden traces:** for each scripted test, record the Rust controller's state every frame (feet, velocity, state). The C++ port must match within a tolerance: 1e-5 for single collision queries (M0), and 1e-4 m per field for whole-controller traces, where per-frame error can build up. Any difference names the first frame and field that differ.
+1. **Ported unit and route tests:** `tests.rs`, `course_tests.rs`, `rooftops_tests.rs`, `moves_tests.rs`, `springboard_tests.rs`, `mesh_tests.rs` and `rough_shapes_tests.rs`, rewritten as doctest cases. Each milestone's plan lists which of these tests it owns, since many in `tests.rs` cover M4 moves.
+2. **Golden traces:** for each scripted test, record the Rust controller's state every frame (feet, velocity, state, events). Collision queries (M0) match within 1e-5. For controller traces, **state and events must match exactly** and positions within 1e-4 m, and the report names the first frame and field that diverge. (A tiny float difference that flips a state threshold makes traces diverge completely, so the first divergence is what matters, not the tolerance.) The Rust test helpers are `#[cfg(test)]`-only, so the M1 plan must decide how traces are produced: either duplicate the scripts in the golden tool, or apply a local, never-committed patch to the reference clone that dumps traces from its own tests.
 3. **One command** (`scripts/test.ps1`) builds FaithCore and runs everything, with no Unreal needed.
 4. **In Unreal:** a few automation tests that load the greybox map and run scripted inputs through the real component. These check the adapter, not the logic.
 5. **Feel:** checked only by playtesting (you, plus 3–5 classmates at M3).
@@ -62,7 +64,7 @@ Unreal/Faith/       UE5 project
 
 | # | Weeks | Deliverable |
 |---|---|---|
-| M0 | 1 | Git and LFS repo, UE 5.7 C++ project, CMake FaithCore skeleton, doctest, `CLAUDE.md`, `CREDITS.md`. Rust installed, faith-runner builds, the golden-trace tool writes traces. |
+| M0 | 1 | Git and LFS repo, UE 5.7 C++ project, CMake FaithCore skeleton, doctest, `CLAUDE.md`, `CREDITS.md`. Rust installed, faith_move's tests pass, the golden tool writes collision golden data. |
 | M1 | 2–4 | FaithCore: World, BoxWorld, MeshWorld (triangle scenes, needed for `mesh_tests`) and collide-and-slide, locomotion, jump and landing, vault and step-up, wallrun, wallclimb, ledge, slide, roll, 180 turn and kick. All their tests and golden traces pass. |
 | M2 | 4–6 | In Unreal: the component, FUnrealWorld, Enhanced Input (keyboard and controller), CameraFx, template first-person arms, and faith-runner's Rooftops map imported by script. |
 | M3 | 7–8 | **Checkpoint:** feel pass, playtests, clip, short write-up. Go/no-go. |
