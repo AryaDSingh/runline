@@ -31,8 +31,9 @@ bool Controller::TryRumpSlide(const World&) { return false; }
 // NOT PORTED: controller.rs try_balance (M4): needs a Beam fixture; there are none.
 bool Controller::TryBalance(const World&) { return false; }
 
-// NOT PORTED: stepup.rs try_auto_step_up (M4): off by default (Tuning::autoStepUp).
-bool Controller::TryAutoStepUp(const World&) { return false; }
+// NOT PORTED: stepup.rs try_auto_step_up (M4). Only called when Tuning::autoStepUp is on, which is
+// exactly when the real check matters, so it fails loudly rather than answer "no".
+bool Controller::TryAutoStepUp(const World&) { throw NotPorted("try_auto_step_up (Tuning::autoStepUp is on)"); }
 
 // NOT PORTED: controller.rs try_springboard / springboard_run_in (M4, springboard).
 bool Controller::TrySpringboard(const World&) { return false; }

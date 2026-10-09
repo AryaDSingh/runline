@@ -37,24 +37,95 @@ index ace84a0..bff293f 100644
          let mut input = *input;
          if input.strafe_raw == 0.0 {
 diff --git a/crates/faith_move/src/lib.rs b/crates/faith_move/src/lib.rs
-index 5efc4e5..8b8ccc1 100644
+index 5efc4e5..b7eb74b 100644
 --- a/crates/faith_move/src/lib.rs
 +++ b/crates/faith_move/src/lib.rs
-@@ -38,6 +38,8 @@ pub use world::{Aabb, Body, BoxWorld, Fixture, MeshWorld, SweepHit, World};
+@@ -38,6 +38,10 @@ pub use world::{Aabb, Body, BoxWorld, Fixture, MeshWorld, SweepHit, World};
  #[cfg(test)]
  mod tests;
  #[cfg(test)]
 +mod trace;
 +#[cfg(test)]
++mod runline_scenarios;
++#[cfg(test)]
  mod course_tests;
  #[cfg(test)]
  mod rooftops_tests;
+diff --git a/crates/faith_move/src/runline_scenarios.rs b/crates/faith_move/src/runline_scenarios.rs
+new file mode 100644
+index 0000000..a4a5435
+--- /dev/null
++++ b/crates/faith_move/src/runline_scenarios.rs
+@@ -0,0 +1,63 @@
++//! (Runline trace patch) Scenarios faith-runner's own tests don't cover, recorded only so
++//! RunlineCore's replays can check them: the jump buffer (jump pressed in the air just before
++//! touchdown) and the walk-off coyote jump (jump pressed just after running off a ledge). They
++//! assert nothing; the trace is the point. Never committed to faith-runner.
++use crate::*;
++use glam::{Vec2, Vec3};
++
++const DT: f32 = 1.0 / 60.0;
++
++fn floor() -> BoxWorld {
++    let mut w = BoxWorld::default();
++    w.add(Aabb::new(Vec3::new(-50.0, -1.0, -50.0), Vec3::new(50.0, 0.0, 50.0)));
++    w
++}
++
++/// Dropping 1.5 m onto a floor, jump pressed `k` frames into the fall (touchdown is around frame
++/// 25; the buffer is 0.15 s, 9 frames).
++fn buffer(k: usize) {
++    let w = floor();
++    let mut c = Controller::new(Tuning::default(), Vec3::new(0.0, 1.5, 0.0), 0.0);
++    for f in 0..60 {
++        let i = Input { jump_pressed: f == k, jump_held: f >= k && f < k + 10, ..Default::default() };
++        c.step(DT, &i, &w);
++    }
++}
++
++#[test]
++fn buffer_k15() { buffer(15) }
++#[test]
++fn buffer_k16() { buffer(16) }
++#[test]
++fn buffer_k17() { buffer(17) }
++#[test]
++fn buffer_k18() { buffer(18) }
++#[test]
++fn buffer_k20() { buffer(20) }
++
++/// Running off a 1 m ledge (facing +x), jump pressed `n` frames after she's left it (coyote time
++/// is 0.12 s, about 7 frames).
++fn coyote(n: usize) {
++    let mut w = floor();
++    w.add(Aabb::new(Vec3::new(-10.0, 0.0, -5.0), Vec3::new(0.0, 1.0, 5.0)));
++    let mut c = Controller::new(Tuning::default(), Vec3::new(-2.0, 1.0, 0.0), -std::f32::consts::FRAC_PI_2);
++    c.state = State::Ground;
++    let mut off: Option<usize> = None;
++    for f in 0..120 {
++        if off.is_none() && c.state == State::Air {
++            off = Some(f);
++        }
++        let press = off.is_some_and(|o| f == o + n);
++        let i = Input { move_axis: Vec2::new(0.0, 1.0), jump_pressed: press, jump_held: press, ..Default::default() };
++        c.step(DT, &i, &w);
++    }
++}
++
++#[test]
++fn coyote_n03() { coyote(3) }
++#[test]
++fn coyote_n06() { coyote(6) }
++#[test]
++fn coyote_n07() { coyote(7) }
++#[test]
++fn coyote_n09() { coyote(9) }
 diff --git a/crates/faith_move/src/trace.rs b/crates/faith_move/src/trace.rs
 new file mode 100644
-index 0000000..77bb253
+index 0000000..16191f7
 --- /dev/null
 +++ b/crates/faith_move/src/trace.rs
-@@ -0,0 +1,96 @@
+@@ -0,0 +1,122 @@
 +//! (Runline trace patch) Records every Controller::step a test makes, for RunlineCore's replay
 +//! tests. Only active when FAITH_TRACE_DIR is set. Never committed to faith-runner.
 +use crate::controller::{Controller, Input};
@@ -104,7 +175,7 @@ index 0000000..77bb253
 +        });
 +        let default = format!("{:?}", c.tuning) == format!("{:?}", Tuning::default());
 +        text += &format!(
-+            "trace,2\ntuning_default,{}\nspawn,{},{},{},{}\ninit,{}\nstate_debug,{:?}\n",
++            "trace,3\ntuning_default,{}\nspawn,{},{},{},{}\ninit,{}\nstate_debug,{:?}\n",
 +            b(default), c.spawn.x, c.spawn.y, c.spawn.z, c.spawn_yaw, snapshot(c), c.state
 +        );
 +    } else {
@@ -138,6 +209,32 @@ index 0000000..77bb253
 +    append(c.trace_id, &text);
 +}
 +
++/// The host-facing outputs: the eye, the mesh offset, the hands on a wall, and the payloads of
++/// Land and the dodges (the out record only names events).
++fn ext(c: &Controller) -> String {
++    use crate::controller::Event;
++    let v = c.view();
++    let hand = |h: Option<glam::Vec3>| match h {
++        Some(p) => format!("1,{},{},{}", p.x, p.y, p.z),
++        None => "0,,,".to_string(),
++    };
++    let payloads: Vec<String> = c
++        .events
++        .iter()
++        .filter_map(|e| match e {
++            Event::Land { impact, fall } => Some(format!("Land:{}:{}", impact, fall)),
++            Event::Dodge { dir } => Some(format!("Dodge:{}:{}:{}", dir.x, dir.y, dir.z)),
++            Event::WallRunDodge { dir } => Some(format!("WallRunDodge:{}:{}:{}", dir.x, dir.y, dir.z)),
++            Event::WallClimbDodge { dir } => Some(format!("WallClimbDodge:{}:{}:{}", dir.x, dir.y, dir.z)),
++            _ => None,
++        })
++        .collect();
++    format!(
++        "ext,{},{},{},{},{},{},{}\n",
++        v.eye.x, v.eye.y, v.eye.z, c.mesh_offset, hand(c.against_wall.left), hand(c.against_wall.right), payloads.join(";")
++    )
++}
++
 +pub fn after(c: &Controller) {
 +    if dir().is_none() || c.trace_id == 0 {
 +        return;
@@ -149,7 +246,7 @@ index 0000000..77bb253
 +        .collect();
 +    let now = snapshot(c);
 +    SEEN.with(|s| s.borrow_mut()[c.trace_id - 1].1 = now.clone());
-+    append(c.trace_id, &format!("out,{},{}\n", now, events.join(";")));
++    append(c.trace_id, &format!("out,{},{}\n{}", now, events.join(";"), ext(c)));
 +}
 diff --git a/crates/faith_move/src/world.rs b/crates/faith_move/src/world.rs
 index d3c3984..1b7a845 100644

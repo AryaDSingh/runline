@@ -59,9 +59,39 @@ std::string Diff(const trace::Snapshot& want, const Controller& c, const std::ve
     return d.str();
 }
 
+/// First difference in the host-facing outputs (trace v3 `ext`), or "".
+std::string DiffExt(const trace::Ext& want, const Controller& c) {
+    std::ostringstream d;
+    const auto cmp = [&](const std::string& f, float w, float g) { if (d.str().empty() && !Same(w, g)) d << f << ": want " << Num(w) << ", got " << Num(g); };
+    const View v = c.GetView();
+    cmp("eye.x", want.eye.x, v.eye.x); cmp("eye.y", want.eye.y, v.eye.y); cmp("eye.z", want.eye.z, v.eye.z);
+    cmp("mesh_offset", want.meshOffset, c.meshOffset);
+    const auto hand = [&](const char* name, const std::optional<Vec3>& w, const std::optional<Vec3>& g) {
+        if (!d.str().empty()) return;
+        if (w.has_value() != g.has_value()) { d << name << ": want " << (w ? "a hand" : "none") << ", got " << (g ? "a hand" : "none"); return; }
+        if (w) { cmp(std::string(name) + ".x", w->x, g->x); cmp(std::string(name) + ".y", w->y, g->y); cmp(std::string(name) + ".z", w->z, g->z); }
+    };
+    hand("against_wall.left", want.left, c.againstWall.left);
+    hand("against_wall.right", want.right, c.againstWall.right);
+    std::vector<std::pair<std::string, std::vector<float>>> got;
+    for (const Event& e : c.events) {
+        if (e.kind == EventKind::Land) got.push_back({"Land", {e.impact, e.fall}});
+        if (e.kind == EventKind::Dodge || e.kind == EventKind::WallRunDodge || e.kind == EventKind::WallClimbDodge)
+            got.push_back({EventName(e.kind), {e.dir.x, e.dir.y, e.dir.z}});
+    }
+    if (d.str().empty() && got.size() != want.payloads.size()) d << "event payloads: want " << want.payloads.size() << ", got " << got.size();
+    for (size_t k = 0; d.str().empty() && k < got.size(); ++k) {
+        if (got[k].first != want.payloads[k].first) { d << "payload " << k << ": want " << want.payloads[k].first << ", got " << got[k].first; break; }
+        for (size_t j = 0; j < got[k].second.size() && j < want.payloads[k].second.size(); ++j)
+            cmp(got[k].first + "[" + std::to_string(j) + "]", want.payloads[k].second[j], got[k].second[j]);
+    }
+    return d.str();
+}
+
 /// Replays a trace; returns "" if every frame matches, else where and how it first diverged.
 std::string Replay(const trace::Trace& t) {
     if (!t.defaultTuning) return "uses non-default tuning (not replayable yet)";
+    if (t.frames.empty()) return "has no frames";
     // Controller::new at the recorded spawn, then whatever the test set before its first step.
     Controller c(Tuning{}, t.spawn, t.spawnYaw);
     Apply(c, t.init);
@@ -83,7 +113,8 @@ std::string Replay(const trace::Trace& t) {
         } catch (const NotPorted& e) {
             return "frame " + std::to_string(i) + ": reached " + e.what();
         }
-        const std::string d = Diff(f.out, c, f.events);
+        std::string d = Diff(f.out, c, f.events);
+        if (d.empty() && f.ext) d = DiffExt(*f.ext, c);
         if (!d.empty()) return "frame " + std::to_string(i) + " (of " + std::to_string(t.frames.size()) + "): " + d;
     }
     return "";
@@ -91,9 +122,21 @@ std::string Replay(const trace::Trace& t) {
 
 } // namespace
 
-TEST_CASE("replay: falls_and_lands") { CHECK(Replay(trace::Load("tests__falls_and_lands__1")) == ""); }
-TEST_CASE("replay: sprint_builds_up") { CHECK(Replay(trace::Load("tests__sprint_builds_up__1")) == ""); }
-TEST_CASE("replay: jump_arc_and_land") { CHECK(Replay(trace::Load("tests__jump_arc_and_land__1")) == ""); }
-TEST_CASE("replay: jump_landing_hands_back_the_boost") { CHECK(Replay(trace::Load("tests__jump_landing_hands_back_the_boost__1")) == ""); }
-TEST_CASE("replay: hard_landing_stops_dead") { CHECK(Replay(trace::Load("tests__hard_landing_stops_dead__1")) == ""); }
-TEST_CASE("replay: a_hair_into_the_ground_holds (mesh, buffered jump)") { CHECK(Replay(trace::Load("mesh_tests__a_hair_into_the_ground_holds__2")) == ""); }
+TEST_CASE("replay: every committed trace matches faith_move frame by frame") {
+    const auto names = trace::All();
+    REQUIRE(names.size() >= 15);
+    std::vector<std::string> failures;
+    for (const auto& n : names) {
+        const std::string r = Replay(trace::Load(n));
+        if (!r.empty()) failures.push_back(n + ": " + r);
+    }
+    for (const auto& f : failures) MESSAGE(f);
+    CHECK(failures.empty());
+}
+
+TEST_CASE("replay: every recorded frame carries the host-facing outputs (trace v3)") {
+    for (const auto& n : trace::All()) {
+        CAPTURE(n);
+        for (const auto& f : trace::Load(n).frames) REQUIRE(f.ext.has_value());
+    }
+}

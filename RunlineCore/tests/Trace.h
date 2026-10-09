@@ -37,6 +37,16 @@ struct WorldDump {
     std::vector<std::string> fixtures;   // Rust Debug text; parsed when fixtures are ported (M4)
 };
 
+/// The host-facing outputs after a step (trace v3 `ext` record): what the camera and body use,
+/// none of which feeds back into the snapshot, so it needs its own check.
+struct Ext {
+    runline::Vec3 eye{};
+    float meshOffset = 0;
+    std::optional<runline::Vec3> left, right;   // AgainstWall hands
+    /// Events with payloads, in order: Land (impact, fall), Dodge / WallRunDodge / WallClimbDodge (dir).
+    std::vector<std::pair<std::string, std::vector<float>>> payloads;
+};
+
 struct Frame {
     size_t world = 0;   // index into Trace::worlds
     FrameInput in;
@@ -45,6 +55,7 @@ struct Frame {
     bool hasOut = false;
     /// What a test set the controller to just before this step, if it changed it between steps.
     std::optional<Snapshot> set;
+    std::optional<Ext> ext;
 };
 
 struct Trace {
@@ -116,7 +127,7 @@ inline Trace Parse(std::istream& in, const std::string& name) {
         }
         const auto f = Split(line, ',');
         if (f[0] == "trace") {
-            if (f.size() < 2 || f[1] != "2") throw std::runtime_error(name + ": unsupported trace version (re-run make-traces.sh)");
+            if (f.size() < 2 || f[1] != "3") throw std::runtime_error(name + ": unsupported trace version (re-run make-traces.sh)");
         } else if (f[0] == "tuning_default") {
             Need(f, 2, name);
             t.defaultTuning = f[1] == "1";
@@ -126,6 +137,23 @@ inline Trace Parse(std::istream& in, const std::string& name) {
             t.spawnYaw = std::stof(f[4]);
         } else if (f[0] == "state_debug") {
             t.initStateDebug = line.substr(12);
+        } else if (f[0] == "ext") {
+            if (t.frames.empty() || !t.frames.back().hasOut || t.frames.back().ext) throw std::runtime_error(name + ": ext record not after an out record");
+            Need(f, 14, name);
+            Ext x;
+            x.eye = {std::stof(f[1]), std::stof(f[2]), std::stof(f[3])};
+            x.meshOffset = std::stof(f[4]);
+            if (f[5] == "1") x.left = runline::Vec3{std::stof(f[6]), std::stof(f[7]), std::stof(f[8])};
+            if (f[9] == "1") x.right = runline::Vec3{std::stof(f[10]), std::stof(f[11]), std::stof(f[12])};
+            if (!f[13].empty()) {
+                for (const std::string& item : Split(f[13], ';')) {
+                    const auto parts = Split(item, ':');
+                    std::vector<float> values;
+                    for (size_t k = 1; k < parts.size(); ++k) values.push_back(std::stof(parts[k]));
+                    x.payloads.push_back({parts[0], values});
+                }
+            }
+            t.frames.back().ext = x;
         } else if (f[0] == "set") {
             Need(f, 12, name);
             pendingSet = ParseSnapshot(f, 1);

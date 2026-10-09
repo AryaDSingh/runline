@@ -62,3 +62,15 @@ TEST_CASE("a fall of 10 m or more is lethal and respawns you") {                
     CHECK(c.feet.y > c.spawn.y - 0.01f);
     CHECK(std::holds_alternative<Air>(c.state));
 }
+
+TEST_CASE("turning on auto step-up before it's ported fails loudly, not silently") {   // Review Focus 5
+    BoxWorld w = Floor();
+    w.Add(Aabb::New({-1, 0, -2}, {1, 0.3f, -1.5f}));   // knee-high, just ahead (yaw 0 faces -z)
+    Tuning t;
+    t.autoStepUp = true;
+    Controller c(t, {0, 0, 0}, 0.0f);
+    c.state = Ground{};
+    Input fwd;
+    fwd.moveAxis = {0.0f, 1.0f};
+    CHECK_THROWS_AS([&] { for (int i = 0; i < 120; ++i) c.Step(1.0f / 60.0f, fwd, w); }(), NotPorted);
+}
