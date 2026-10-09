@@ -1,0 +1,13 @@
+[package]
+name = "golden"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Its own workspace, so a future root Cargo.toml can't capture it.
+[workspace]
+
+[dependencies]
+faith_move = { path = "../../../faith-runner/crates/faith_move" }
+# Pinned to the version in faith-runner's Cargo.lock, so the reference maths can't shift.
+glam = "=0.32.1"
