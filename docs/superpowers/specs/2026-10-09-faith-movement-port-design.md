@@ -24,7 +24,7 @@ Pitch: *"I ported Mirror's Edge's movement to UE5, then designed new moves that 
 | Engine | Unreal Engine 5.7, C++ (Blueprints only for level scripting). Verse/UE6 and Bevy were considered and rejected for career relevance. |
 | Source | `tnrjns/faith-runner` (`crates/faith_move`, Rust). The author granted permission on 2026-10-08 to use, modify and port the code and tuning, with credit. Keep a link to the GitHub issue thread as the record. |
 | Excluded | Combat (melee, takedowns), Mirror's Edge assets, decompiled game scripts, gliding, blinks and timestop. |
-| Timeline | About 6 months at 10–15 h/week, starting the week of 2026-10-12, with a go/no-go checkpoint at about 2026-12-06. |
+| Timeline | About 6 months at 10–15 h/week, starting the week of 2026-10-12, with a go/no-go checkpoint at about 2027-01-17 (moved from 2026-12-06 to keep M1's full scope; decided 2026-10-09). |
 | Art | Simple, cheap and readable: greybox-plus with a strong palette and marketplace assets. The richer ideas from brainstorming (decay-to-dream world, dissolving pixel rendering) are parked until after M3. |
 
 ## 3. Architecture
@@ -62,18 +62,19 @@ Unreal/Faith/       UE5 project
 
 ## 5. Milestones
 
-| # | Weeks | Deliverable |
+| # | Weeks (dates) | Deliverable |
 |---|---|---|
-| M0 | 1 | Git and LFS repo, UE 5.7 C++ project, CMake FaithCore skeleton, doctest, `CLAUDE.md`, `CREDITS.md`. Rust installed, faith_move's tests pass, the golden tool writes collision golden data. |
-| M1 | 2–4 | FaithCore: World, BoxWorld, MeshWorld (triangle scenes, needed for `mesh_tests`) and collide-and-slide, locomotion, jump and landing, vault and step-up, wallrun, wallclimb, ledge, slide, roll, 180 turn and kick. All their tests and golden traces pass. |
-| M2 | 4–6 | In Unreal: the component, FUnrealWorld, Enhanced Input (keyboard and controller), CameraFx, template first-person arms, and faith-runner's Rooftops map imported by script. |
-| M3 | 7–8 | **Checkpoint:** feel pass, playtests, clip, short write-up. Go/no-go. |
-| M4 | 9–12 | The remaining ported moves (springboard, swing, zipline, balance, coil, dodge, barge, wall-to-wall, corner shimmy), plus Reaction Time (`reaction.rs`). |
-| M5 | 11–14 | **New momentum moves:** design 1–2 (candidates: a grapple line that preserves momentum, a dash that spends sprint energy, a wall-bounce chain), each with written rules, tuning and tests. |
-| M6 | 13–18 | One level built to a movement metrics sheet, with a time trial (ghost run, instant restart, generous checkpoints). |
-| M7 | 19–20 | Video, case study, README, release build, credits. **Done.** |
+| M0 | 1 (Oct 12–18) | Git and LFS repo, UE 5.7 C++ project, CMake FaithCore skeleton, doctest, `CLAUDE.md`, `CREDITS.md`. Rust installed, faith_move's tests pass, the golden tool writes collision golden data. |
+| M1 | 2–7 (Oct 19–Nov 29) | FaithCore: World, BoxWorld, MeshWorld (triangle scenes, needed for `mesh_tests`) and collide-and-slide, locomotion, jump and landing, vault and step-up, wallrun, wallclimb, ledge, slide, roll, 180 turn and kick. All their tests and golden traces pass. Split into several plans (collision, then locomotion and jump, then the wall moves, then the rest). |
+| M2 | 8–10 (Nov 30–Dec 20) | In Unreal: the component, FUnrealWorld, Enhanced Input (keyboard and controller), CameraFx, template first-person arms, and faith-runner's Rooftops map imported by script. Light weeks expected (exams). |
+| — | 11–12 (Dec 21–Jan 3) | Holiday buffer: no planned work. |
+| M3 | 13–14 (Jan 4–17) | **Checkpoint (about 2027-01-17):** feel pass, playtests, clip, short write-up. Go/no-go. |
+| M4 | 15–18 (Jan 18–Feb 14) | The remaining ported moves (springboard, swing, zipline, balance, coil, dodge, barge, wall-to-wall, corner shimmy), plus Reaction Time (`reaction.rs`). |
+| M5 | 17–20 (Feb 1–28) | **New momentum moves:** design 1–2 (candidates: a grapple line that preserves momentum, a dash that spends sprint energy, a wall-bounce chain), each with written rules, tuning and tests. |
+| M6 | 19–23 (Feb 15–Mar 21) | One level built to a movement metrics sheet, with a time trial (ghost run, instant restart, generous checkpoints). |
+| M7 | 24–26 (Mar 22–Apr 11) | Video, case study, README, release build, credits. **Done.** |
 
-If time runs short, trim M4 first (balance, barge, shimmy), then cut M5 to one move. M7 is never cut.
+The schedule now has no slack beyond the holiday buffer. If time runs short, trim M4 first (balance, barge, shimmy), then cut M5 to one move. M7 is never cut.
 
 ## 6. Risks
 
