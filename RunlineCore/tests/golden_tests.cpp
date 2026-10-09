@@ -1,6 +1,7 @@
 #include "Golden.h"
 #include "runline/Move.h"
 #include "runline/Probes.h"
+#include "runline/Locomotion.h"
 #include <cmath>
 using namespace runline;
 
@@ -162,3 +163,59 @@ TEST_CASE("golden: MeshWorld::Sweep matches faith_move") {
 TEST_CASE("golden: SlideMove matches faith_move (mesh)") { CheckSlides(golden::MeshScene(), "mesh_slides.csv"); }
 TEST_CASE("golden: TraceWall matches faith_move (mesh)") { CheckTraceWall(golden::MeshScene(), "mesh_trace_wall.csv"); }
 TEST_CASE("golden: FindLedge matches faith_move (mesh)") { CheckFindLedge(golden::MeshScene(), "mesh_find_ledge.csv"); }
+
+TEST_CASE("golden: locomotion curves match faith_move") {
+    const auto rows = golden::Require("curves.csv", 400, 3);
+    const Locomotion loco;
+    const Curve speed{SPEED_CURVE};
+    golden::Report rep;
+    size_t point = 0;
+    for (size_t i = 0; i < rows.size(); ++i) {
+        const auto& r = rows[i];
+        if (r[0] == 0.0f) {
+            REQUIRE(point < loco.accelCurve.points.size());
+            rep.Float(i, "point.x", r[1], loco.accelCurve.points[point].first);
+            rep.Float(i, "point.y", r[2], loco.accelCurve.points[point].second);
+            ++point;
+        } else {
+            rep.Float(i, r[0] == 1.0f ? "speed.eval" : "accel.eval", r[2], (r[0] == 1.0f ? speed : loco.accelCurve).Eval(r[1]));
+        }
+    }
+    CHECK(point == loco.accelCurve.points.size());
+    rep.Finish();
+}
+
+TEST_CASE("golden: sprint, walk and controller acceleration match faith_move") {
+    const auto rows = golden::Require("loco_accel.csv", 3000, 27);
+    const Locomotion loco;
+    golden::Report rep;
+    for (size_t i = 0; i < rows.size(); ++i) {
+        const auto& r = rows[i];
+        RunState st{r[1], r[2], r[3]};
+        const RunInput in{golden::V(r, 4), golden::V(r, 7), r[10], r[11], r[12]};
+        Vec3 vel = golden::V(r, 13);
+        const float dt = r[16];
+        const bool falling = r[17] != 0.0f;
+        const int kind = static_cast<int>(r[0]);
+        const Vec3 a = kind == 0 ? loco.SprintAccel(st, in, vel, dt, falling)
+                     : kind == 1 ? loco.WalkAccel(st, in, vel, dt, falling)
+                                 : loco.ControllerAccel(st, in, vel, dt);
+        rep.Vec(i, "accel", r, 18, a);
+        rep.Float(i, "energy", r[21], st.energy);
+        rep.Float(i, "accelTime", r[22], st.accelTime);
+        rep.Float(i, "stopping", r[23], st.stopping);
+        rep.Vec(i, "vel", r, 24, vel);
+    }
+    rep.Finish();
+}
+
+TEST_CASE("golden: CalcVelocity matches faith_move, braking and dt = 0 included") {   // Review Focus 4
+    const auto rows = golden::Require("loco_velocity.csv", 2000, 12);
+    const Locomotion loco;
+    golden::Report rep;
+    for (size_t i = 0; i < rows.size(); ++i) {
+        const auto& r = rows[i];
+        rep.Vec(i, "v", r, 9, loco.CalcVelocity(golden::V(r, 0), golden::V(r, 3), r[6], r[7], r[8]));
+    }
+    rep.Finish();
+}
