@@ -3,7 +3,7 @@ project(RunlineCore CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_library(RunlineCore STATIC src/BoxWorld.cpp src/Move.cpp src/Probes.cpp src/MeshWorld.cpp src/Locomotion.cpp src/Tuning.cpp src/Controller.cpp src/ControllerStubs.cpp)
+add_library(RunlineCore STATIC src/BoxWorld.cpp src/Move.cpp src/Probes.cpp src/MeshWorld.cpp src/Locomotion.cpp src/Tuning.cpp src/Controller.cpp src/ControllerStubs.cpp src/Vault.cpp)
 target_include_directories(RunlineCore PUBLIC include)
 if(MSVC)
   target_compile_options(RunlineCore PRIVATE /W4 /fp:strict)

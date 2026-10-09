@@ -2,6 +2,7 @@
 #include "runline/Move.h"
 #include "runline/Probes.h"
 #include "runline/Locomotion.h"
+#include "runline/Vault.h"
 #include <cmath>
 using namespace runline;
 
@@ -216,6 +217,22 @@ TEST_CASE("golden: CalcVelocity matches faith_move, braking and dt = 0 included"
     for (size_t i = 0; i < rows.size(); ++i) {
         const auto& r = rows[i];
         rep.Vec(i, "v", r, 9, loco.CalcVelocity(golden::V(r, 0), golden::V(r, 3), r[6], r[7], r[8]));
+    }
+    rep.Finish();
+}
+
+TEST_CASE("golden: VAULT_TYPES matches faith_move's table bit for bit") {
+    const auto rows = golden::Require("vault_types.csv", 6, 17);
+    REQUIRE(rows.size() == VAULT_TYPES.size());
+    golden::Report rep;
+    for (size_t i = 0; i < rows.size(); ++i) {
+        const auto& r = rows[i];
+        const VaultType& t = VAULT_TYPES[i];
+        rep.Flag(i, "onto", r[0], t.onto);
+        const float got[] = {t.minHeight, t.maxHeight, t.minSpeedZ, t.maxSpeedZ, t.maxMomentum, t.maxDistanceTime, t.clampSpeedMin,
+                             t.clampSpeedMax, t.speedAddition, t.timeUp, t.timeOver, t.timeDown, t.handplant.first, t.handplant.second,
+                             t.ledge.first, t.ledge.second};
+        for (int k = 0; k < 16; ++k) rep.Float(i, "field " + std::to_string(k + 1), r[1 + k], got[k]);
     }
     rep.Finish();
 }

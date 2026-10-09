@@ -7,6 +7,7 @@ mod scalars;
 mod slides;
 mod sweeps;
 mod tuning;
+mod vault;
 
 fn main() {
     let dir = common::golden_dir();
@@ -28,5 +29,6 @@ fn main() {
     common::write(&dir, "loco_accel.csv", locomotion::accel_csv());
     common::write(&dir, "loco_velocity.csv", locomotion::velocity_csv());
     common::write(&dir, "tuning.txt", tuning::txt());
+    common::write(&dir, "vault_types.csv", vault::types_csv());
     common::write_reference(&dir);
 }

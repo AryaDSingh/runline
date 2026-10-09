@@ -73,6 +73,7 @@ const char* StateName(const State& s) {
     if (Is<WallClimbTurned>(s)) return "Wallclimb (turned)";
     if (const auto* h = std::get_if<LedgeHang>(&s)) return h->turned ? "Ledge hang (turned)" : "Ledge hang";
     if (Is<SoftLand>(s)) return "Soft landing";
+    if (const auto* v = std::get_if<Vault>(&s)) return v->Onto() ? "Vault onto" : "Vault";
     if (const auto* tr = std::get_if<Traverse>(&s)) {
         switch (tr->kind) {
             case TraverseKind::Vault: return "Vault";
@@ -370,6 +371,7 @@ void Controller::Substep(float dt, const Input& input, const World& world) {
     else if (const auto* l = std::get_if<LedgeHang>(&state)) HangState(dt, l->normal, l->ledgeY, input, world);
     else if (const auto* sl = std::get_if<Slide>(&state)) SlideState(dt, sl->t, input, world);
     else if (const auto* r = std::get_if<Roll>(&state)) RollState(dt, r->t, world);
+    else if (const auto* v = std::get_if<Vault>(&state)) VaultState(dt, *v, world);
     else if (const auto* tr = std::get_if<Traverse>(&state)) TraverseState(dt, *tr, world);
     else UnportedState(state, dt, input, world);
 
@@ -1119,6 +1121,45 @@ void Controller::RollState(float dt, float t, const World& world) {
     }
     Integrate(dt, world, true);
     if (!Grounded(world)) state = Air{};
+}
+
+// ---------------------------------------------------------------- vaults
+
+/// TdMove_Jump / TdMove_Falling bCheckForVaultOver: vault or step up onto whatever's ahead.
+bool Controller::TryVault(const Input&, const World& world) {
+    const Vec3 fwd = ForwardOf(yaw);
+    const Vec3 view = fwd * std::cos(pitch) + Vec3::UnitY() * std::sin(pitch);
+    const auto v = PlanVault(world, tuning, GetBody(), feet, vel, fwd, view);
+    if (!v) return false;
+    coiled_ = false;
+    crouched = false;
+    jumpBuffer_ = 0.0f;
+    events.push_back({v->Onto() ? EventKind::Mantle : EventKind::Vault});
+    state = *v;
+    return true;
+}
+
+/// TdMove_SpeedVault.UpdateVaultMovement: up to the hand-plant, over, down to the end; then walking
+/// (onto, or over onto the floor) or falling, at the speed of the last leg.
+void Controller::VaultState(float dt, Vault v, const World& world) {
+    v.t += dt;
+    vel = Vec3::Zero();
+    // bEndMoveInMelee: the vault kick (TdMove_MeleeVault) comes with the attacks (M4); nothing
+    // ported can set v.kick yet.
+    if (v.kick) throw NotPorted("vault kick");
+    if (v.t < v.Duration()) {
+        feet = v.Position(v.t);
+        state = v;
+        return;
+    }
+    feet = v.end;
+    // SetStoredVelocity: the way down's speed.
+    vel = v.held ? Vec3::Zero() : v.exitVel;
+    airTime_ = 0.0f;
+    fallPeak_ = BodyY();
+    if (v.falling || !Grounded(world)) state = Air{};
+    else state = Ground{};
+    SyncSprintCharge();
 }
 
 // ---------------------------------------------------------------- ledges

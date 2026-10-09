@@ -49,9 +49,6 @@ bool Controller::TryGrabFixture(const World&) { return false; }
 // ledge-to-ledge transfer when pushing up on a hang.
 bool Controller::TryGrabTransfer(Vec3, float, const World&) { return false; }
 
-// NOT PORTED: vault.rs plan (M1d, vaults): the jump's vault check.
-bool Controller::TryVault(const Input&, const World&) { return false; }
-
 // NOT PORTED: controller.rs soft_below / check_barbed_wire (M4): both look for fixtures (SoftPad,
 // BarbedWire), and the C++ World has none until fixtures are ported.
 bool Controller::SoftBelow(const World&, float) const { return false; }
