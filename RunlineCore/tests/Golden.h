@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 #include "runline/BoxWorld.h"
+#include "runline/MeshWorld.h"
 
 namespace golden {
 
@@ -47,6 +48,13 @@ inline runline::Vec3 V(const Row& r, size_t i) { return {r[i], r[i + 1], r[i + 2
 inline runline::BoxWorld BoxScene() {
     runline::BoxWorld w;
     for (const Row& r : Require("scene.csv", 1, 6)) w.Add(runline::Aabb::New(V(r, 0), V(r, 3)));
+    return w;
+}
+
+/// The triangle scene tools/golden used (mesh_scene.csv).
+inline runline::MeshWorld MeshScene() {
+    runline::MeshWorld w;
+    for (const Row& r : Require("mesh_scene.csv", 1, 9)) w.tris.push_back(runline::Tri{V(r, 0), V(r, 3), V(r, 6)});
     return w;
 }
 

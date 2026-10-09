@@ -148,3 +148,17 @@ TEST_CASE("golden: TraceWall matches faith_move (boxes)") { CheckTraceWall(golde
 TEST_CASE("golden: TraceBox matches faith_move (boxes)") { CheckTraceBox(golden::BoxScene(), "trace_box.csv"); }
 TEST_CASE("golden: TopsBelow matches faith_move (boxes)") { CheckTopsBelow(golden::BoxScene(), "tops_below.csv"); }
 TEST_CASE("golden: FindLedge matches faith_move (boxes)") { CheckFindLedge(golden::BoxScene(), "find_ledge.csv"); }
+
+TEST_CASE("golden: MeshWorld::Sweep matches faith_move") {
+    const MeshWorld w = golden::MeshScene();
+    const auto rows = golden::Require("mesh_sweeps.csv", 1000, 17);
+    golden::Report rep;
+    for (size_t i = 0; i < rows.size(); ++i) {
+        const auto& r = rows[i];
+        golden::CompareHit(rep, i, w.Sweep(golden::V(r, 0), golden::V(r, 3), golden::V(r, 6)), r, 9);
+    }
+    rep.Finish();
+}
+TEST_CASE("golden: SlideMove matches faith_move (mesh)") { CheckSlides(golden::MeshScene(), "mesh_slides.csv"); }
+TEST_CASE("golden: TraceWall matches faith_move (mesh)") { CheckTraceWall(golden::MeshScene(), "mesh_trace_wall.csv"); }
+TEST_CASE("golden: FindLedge matches faith_move (mesh)") { CheckFindLedge(golden::MeshScene(), "mesh_find_ledge.csv"); }

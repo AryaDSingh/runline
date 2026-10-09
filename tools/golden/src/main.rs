@@ -1,5 +1,6 @@
 //! Writes reference results from faith-runner's faith_move for RunlineCore's golden tests.
 mod common;
+mod mesh;
 mod probes;
 mod scalars;
 mod slides;
@@ -20,5 +21,6 @@ fn main() {
     common::write(&dir, "trace_box.csv", probes::trace_box_csv(&boxes, &anchors, 0x7B0C));
     common::write(&dir, "tops_below.csv", probes::tops_below_csv(&boxes, &anchors));
     common::write(&dir, "find_ledge.csv", probes::find_ledge_csv(&boxes, &anchors, 0x1ED6));
+    mesh::write_all(&dir);
     common::write_reference(&dir);
 }
