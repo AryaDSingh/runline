@@ -5,6 +5,7 @@
 #include <bit>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <fstream>
 #include <optional>
 #include <sstream>
@@ -59,7 +60,12 @@ inline runline::MeshWorld MeshScene() {
 }
 
 inline bool Same(float a, float b) { return std::bit_cast<std::uint32_t>(a) == std::bit_cast<std::uint32_t>(b); }
-inline bool Near(float a, float b) { return std::fabs(a - b) <= 1e-5f; }
+/// A float printed with enough digits to tell neighbours apart.
+inline std::string Bits(float v) {
+    char buf[32];
+    std::snprintf(buf, sizeof buf, "%.9g", v);
+    return buf;
+}
 
 /// Collects mismatches; the first ten are logged with their row and field.
 class Report {
@@ -67,8 +73,10 @@ public:
     void Add(size_t row, const std::string& what) {
         if (++count_ <= 10) MESSAGE("row " << row << " (csv line " << row + 2 << "): " << what);
     }
+    /// Bit-for-bit: the port must reproduce Rust's exact float results (operation order and
+    /// all), since a last-bit difference can flip a threshold in the controller later.
     void Float(size_t row, const std::string& field, float want, float got) {
-        if (!Near(want, got)) Add(row, field + ": want " + std::to_string(want) + ", got " + std::to_string(got));
+        if (!Same(want, got)) Add(row, field + ": want " + Bits(want) + ", got " + Bits(got));
     }
     void Flag(size_t row, const std::string& field, float want, bool got) {
         const bool w = want != 0.0f;

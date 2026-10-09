@@ -5,7 +5,7 @@
 
 namespace runline {
 
-/// Closest point on segment a–b to p, and its distance along from a.
+/// Closest point on segment a-b to p, and its distance along from a.
 struct Closest { Vec3 point; float along; };
 Closest ClosestOnSegment(Vec3 a, Vec3 b, Vec3 p);
 
@@ -28,8 +28,9 @@ struct WallHit {
     /// Gap between the body and the face.
     float gap;
 };
-/// Sweep a thin slice of the body (`y` above the feet, ±2 cm like ME's extent traces)
-/// horizontally along `dir` for up to `reach`: the first wall it runs into, at any angle.
+/// Sweep a thin slice of the body (`y` above the feet, +/-2 cm like ME's extent traces)
+/// horizontally along `dir` for up to `reach`: the first wall it runs into, at any angle to
+/// `dir`, including ones it only grazes.
 std::optional<WallHit> TraceWall(const World& world, Body body, Vec3 feet, Vec3 dir, float reach, float y);
 
 /// Heights of the walkable tops under a column (half size `halfXZ` across) at `p`, highest
@@ -37,6 +38,7 @@ std::optional<WallHit> TraceWall(const World& world, Body body, Vec3 feet, Vec3 
 std::vector<float> TopsBelow(const World& world, Vec3 p, float halfXZ, float yHi, float yLo);
 
 /// Height of the top of whatever stands at `p` (x, z), traced down from `y1`; `y0` if nothing.
+/// Traces only see surfaces, so `y1` should be above anything that counts.
 float ColumnTop(const World& world, Vec3 p, float y0, float y1);
 
 /// A climbable top edge on the wall with outward normal `n`, between `lo` and `hi` above the
