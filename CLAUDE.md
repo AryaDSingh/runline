@@ -8,6 +8,10 @@ Spec: docs/superpowers/specs/2026-10-09-faith-movement-port-design.md
 - Golden data: `cargo run --release` in tools/golden (needs the reference clone at
   ../faith-runner). It rewrites RunlineCore/tests/golden/*.csv and REFERENCE (the faith-runner
   commit used; currently 9470d755). Regenerate only from a clean checkout, and commit all three.
+- Controller traces: `bash tools/trace/make-traces.sh` (Git Bash) applies tools/trace/faith-runner-trace.patch
+  to a separate worktree ../faith-runner-trace (the reference clone stays clean), runs faith_move's
+  tests with FAITH_TRACE_DIR set, and copies the traces named in tools/trace/selected.txt into
+  RunlineCore/tests/golden/traces/. Commit them with TRACE_REFERENCE.
 
 ## Conventions
 - RunlineCore: C++20, no Unreal headers. Metres, Y up. float everywhere, as in the Rust code.

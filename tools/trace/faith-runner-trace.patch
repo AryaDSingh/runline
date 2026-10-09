@@ -1,0 +1,203 @@
+diff --git a/crates/faith_move/src/controller.rs b/crates/faith_move/src/controller.rs
+index ace84a0..bff293f 100644
+--- a/crates/faith_move/src/controller.rs
++++ b/crates/faith_move/src/controller.rs
+@@ -549,6 +549,9 @@ pub struct Controller {
+     springboard: Option<SpringRunIn>,
+     /// Seconds since grabbing the current ledge.
+     pub(crate) hang_time: f32,
++    /// (Runline trace patch) Which trace file this controller writes; 0 until its first step.
++    #[cfg(test)]
++    pub(crate) trace_id: usize,
+ }
+ 
+ const SUBSTEP: f32 = 1.0 / 120.0;
+@@ -637,6 +640,8 @@ impl Controller {
+             vertigo_zoom: false,
+             springboard: None,
+             hang_time: 0.0,
++            #[cfg(test)]
++            trace_id: 0,
+             shimmy: None,
+             turned_in_air: false,
+             slide_yaw: 0.0,
+@@ -716,6 +721,14 @@ impl Controller {
+ 
+     /// Advance by `dt` seconds.
+     pub fn step(&mut self, dt: f32, input: &Input, world: &dyn World) {
++        #[cfg(test)]
++        crate::trace::before(self, dt, input, world);
++        self.step_inner(dt, input, world);
++        #[cfg(test)]
++        crate::trace::after(self);
++    }
++
++    fn step_inner(&mut self, dt: f32, input: &Input, world: &dyn World) {
+         self.events.clear();
+         let mut input = *input;
+         if input.strafe_raw == 0.0 {
+diff --git a/crates/faith_move/src/lib.rs b/crates/faith_move/src/lib.rs
+index 5efc4e5..8b8ccc1 100644
+--- a/crates/faith_move/src/lib.rs
++++ b/crates/faith_move/src/lib.rs
+@@ -38,6 +38,8 @@ pub use world::{Aabb, Body, BoxWorld, Fixture, MeshWorld, SweepHit, World};
+ #[cfg(test)]
+ mod tests;
+ #[cfg(test)]
++mod trace;
++#[cfg(test)]
+ mod course_tests;
+ #[cfg(test)]
+ mod rooftops_tests;
+diff --git a/crates/faith_move/src/trace.rs b/crates/faith_move/src/trace.rs
+new file mode 100644
+index 0000000..ede35e7
+--- /dev/null
++++ b/crates/faith_move/src/trace.rs
+@@ -0,0 +1,83 @@
++//! (Runline trace patch) Records every Controller::step a test makes, for RunlineCore's replay
++//! tests. Only active when FAITH_TRACE_DIR is set. Never committed to faith-runner.
++use crate::controller::{Controller, Input};
++use crate::tuning::Tuning;
++use crate::world::World;
++use std::cell::RefCell;
++use std::io::Write as _;
++
++thread_local! {
++    /// Controllers seen on this test thread (numbered from 1), with the world each last wrote.
++    static SEEN: RefCell<Vec<String>> = RefCell::new(Vec::new());
++}
++
++fn dir() -> Option<String> {
++    std::env::var("FAITH_TRACE_DIR").ok()
++}
++
++fn append(id: usize, text: &str) {
++    let name = std::thread::current().name().unwrap_or("main").replace("::", "__");
++    let path = format!("{}/{}__{}.trace", dir().unwrap(), name, id);
++    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(path).unwrap();
++    f.write_all(text.as_bytes()).unwrap();
++}
++
++fn b(x: bool) -> u8 {
++    x as u8
++}
++
++fn snapshot(c: &Controller) -> String {
++    format!(
++        "{},{},{},{},{},{},{},{},{},{},{}",
++        c.feet.x, c.feet.y, c.feet.z, c.vel.x, c.vel.y, c.vel.z, c.yaw, c.pitch, c.state.name(), b(c.crouched), c.sprint_charge
++    )
++}
++
++pub fn before(c: &mut Controller, dt: f32, i: &Input, w: &dyn World) {
++    if dir().is_none() {
++        return;
++    }
++    let mut text = String::new();
++    if c.trace_id == 0 {
++        c.trace_id = SEEN.with(|s| {
++            let mut s = s.borrow_mut();
++            s.push(String::new());
++            s.len()
++        });
++        let default = format!("{:?}", c.tuning) == format!("{:?}", Tuning::default());
++        text += &format!("trace,1\ntuning_default,{}\ninit,{}\n", b(default), snapshot(c));
++    }
++    let dump = w.dump();
++    let changed = SEEN.with(|s| {
++        let mut s = s.borrow_mut();
++        let last = &mut s[c.trace_id - 1];
++        if *last != dump || text.starts_with("trace,") {
++            *last = dump.clone();
++            true
++        } else {
++            false
++        }
++    });
++    if changed {
++        text += &format!("world\n{}end_world\n", dump);
++    }
++    text += &format!(
++        "in,{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
++        dt, i.move_axis.x, i.move_axis.y, i.look.x, i.look.y,
++        b(i.jump_pressed), b(i.jump_held), b(i.crouch_pressed), b(i.crouch_held),
++        b(i.turn_pressed), b(i.melee_pressed), b(i.takedown_pressed), i.strafe_raw
++    );
++    append(c.trace_id, &text);
++}
++
++pub fn after(c: &Controller) {
++    if dir().is_none() || c.trace_id == 0 {
++        return;
++    }
++    let events: Vec<String> = c
++        .events
++        .iter()
++        .map(|e| format!("{:?}", e).split(|ch: char| !ch.is_alphanumeric() && ch != '_').next().unwrap_or("").to_string())
++        .collect();
++    append(c.trace_id, &format!("out,{},{}\n", snapshot(c), events.join(";")));
++}
+diff --git a/crates/faith_move/src/world.rs b/crates/faith_move/src/world.rs
+index d3c3984..1b7a845 100644
+--- a/crates/faith_move/src/world.rs
++++ b/crates/faith_move/src/world.rs
+@@ -104,6 +104,11 @@ pub trait World {
+         &[]
+     }
+ 
++    /// (Runline trace patch) The geometry as text, for RunlineCore's replay tests.
++    fn dump(&self) -> String {
++        String::new()
++    }
++
+     fn is_free(&self, region: &Aabb) -> bool {
+         !self.overlaps(region)
+     }
+@@ -117,6 +122,10 @@ pub struct Layered<'a> {
+ }
+ 
+ impl World for Layered<'_> {
++    fn dump(&self) -> String {
++        self.still.dump() + &self.moving.dump()
++    }
++
+     fn sweep(&self, half: Vec3, start: Vec3, delta: Vec3) -> Option<SweepHit> {
+         match (self.still.sweep(half, start, delta), self.moving.sweep(half, start, delta)) {
+             (Some(a), Some(b)) => Some(if b.t < a.t { b } else { a }),
+@@ -285,6 +294,17 @@ fn sweep_boxes<'a>(boxes: impl Iterator<Item = &'a Aabb>, half: Vec3, start: Vec
+ }
+ 
+ impl World for BoxWorld {
++    fn dump(&self) -> String {
++        let mut s = String::new();
++        for b in &self.boxes {
++            s += &format!("box,{},{},{},{},{},{}\n", b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z);
++        }
++        for fx in &self.fixtures {
++            s += &format!("fixture,{:?}\n", fx);
++        }
++        s
++    }
++
+     fn sweep(&self, half: Vec3, start: Vec3, delta: Vec3) -> Option<SweepHit> {
+         let a = Aabb::new(start - half, start + half);
+         let region = a.union(&a.translated(delta));
+@@ -412,6 +432,17 @@ fn tri_box_overlap(t: &[Vec3; 3], c: Vec3, h: Vec3) -> bool {
+ }
+ 
+ impl World for MeshWorld {
++    fn dump(&self) -> String {
++        let mut s = String::new();
++        for t in &self.tris {
++            s += &format!("tri,{},{},{},{},{},{},{},{},{}\n", t[0].x, t[0].y, t[0].z, t[1].x, t[1].y, t[1].z, t[2].x, t[2].y, t[2].z);
++        }
++        for fx in &self.fixtures {
++            s += &format!("fixture,{:?}\n", fx);
++        }
++        s
++    }
++
+     fn sweep(&self, half: Vec3, start: Vec3, delta: Vec3) -> Option<SweepHit> {
+         let a = Aabb::new(start - half, start + half);
+         let region = a.union(&a.translated(delta));
