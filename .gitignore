@@ -1,1 +1,12 @@
+# Leading slash: core.ignorecase=true would make `build/` also ignore Unreal's Build/ folder.
 .superpowers/
+/build/
+FaithCore/out/
+.vs/
+tools/golden/target/
+Unreal/Faith/Binaries/
+Unreal/Faith/Intermediate/
+Unreal/Faith/Saved/
+Unreal/Faith/DerivedDataCache/
+Unreal/Faith/.vs/
+*.sln
