@@ -1,4 +1,4 @@
-# Faith (working title): design
+# Runline: design
 
 Date: 2026-10-09 · Status: draft for review
 
@@ -30,21 +30,21 @@ Pitch: *"I ported Mirror's Edge's movement to UE5, then designed new moves that 
 ## 3. Architecture
 
 ```
-FaithCore/          plain C++20 static library: no Unreal, builds with CMake
+RunlineCore/          plain C++20 static library: no Unreal, builds with CMake
   World.h           interface: Sweep(half, start, delta) -> optional<SweepHit>, Overlaps(Aabb), Fixtures()
   BoxWorld, MeshWorld   test worlds (port of world.rs)
   Controller        state machine (port of controller.rs) + locomotion, vault, climb, look, ...
   Tuning.h          every number, keeping the `ME:` / `guess` provenance comments
   CameraFx          bob, shake, tilt, FOV (port of camera.rs)
-FaithCore/tests/    ported scripted-input tests + golden-trace comparisons (doctest)
+RunlineCore/tests/    ported scripted-input tests + golden-trace comparisons (doctest)
 tools/golden/       small Rust program, run against faith-runner, that writes per-frame traces
-Unreal/Faith/       UE5 project
-  UFaithMovementComponent   UCharacterMovementComponent custom mode; ticks FaithCore at a fixed 60 Hz
+Unreal/Runline/       UE5 project
+  URunlineMovementComponent   UCharacterMovementComponent custom mode; ticks RunlineCore at a fixed 60 Hz
   FUnrealWorld      World implemented with UWorld sweep/overlap queries (unit conversion: m <-> cm, Y-up <-> Z-up)
   Input, camera, arms, greybox importer (Editor Python: builds levels from box lists)
 ```
 
-**Unit boundary.** FaithCore works in metres with Y up, as `faith_move` does. All conversion happens in one place, `FUnrealWorld` and the component. Nothing else in the Unreal layer touches raw core coordinates. The M2 plan must write down the exact axis mapping (core x/y/z to Unreal X/Y/Z, accounting for Unreal's left-handed frame) and the yaw/pitch convention, and test both.
+**Unit boundary.** RunlineCore works in metres with Y up, as `faith_move` does. All conversion happens in one place, `FUnrealWorld` and the component. Nothing else in the Unreal layer touches raw core coordinates. The M2 plan must write down the exact axis mapping (core x/y/z to Unreal X/Y/Z, accounting for Unreal's left-handed frame) and the yaw/pitch convention, and test both.
 
 **Fixed step.** The core always steps at 1/60 s, as faith-runner's tests do. The component accumulates frame time and runs whole steps. **Mouse look is not stepped:** raw yaw and pitch are applied every render frame and the accumulated look is fed to the core each step, so look never lags on high-refresh displays. Only the camera and arms are interpolated between steps; the capsule stays at the real stepped position, so Unreal-side triggers (checkpoints, time-trial gates) don't lag.
 
@@ -56,7 +56,7 @@ Unreal/Faith/       UE5 project
 
 1. **Ported unit and route tests:** `tests.rs`, `course_tests.rs`, `rooftops_tests.rs`, `moves_tests.rs`, `springboard_tests.rs`, `mesh_tests.rs` and `rough_shapes_tests.rs`, rewritten as doctest cases. Each milestone's plan lists which of these tests it owns, since many in `tests.rs` cover M4 moves.
 2. **Golden traces:** for each scripted test, record the Rust controller's state every frame (feet, velocity, state, events). Collision queries (M0) match within 1e-5. For controller traces, **state and events must match exactly** and positions within 1e-4 m, and the report names the first frame and field that diverge. (A tiny float difference that flips a state threshold makes traces diverge completely, so the first divergence is what matters, not the tolerance.) The Rust test helpers are `#[cfg(test)]`-only, so the M1 plan must decide how traces are produced: either duplicate the scripts in the golden tool, or apply a local, never-committed patch to the reference clone that dumps traces from its own tests.
-3. **One command** (`scripts/test.ps1`) builds FaithCore and runs everything, with no Unreal needed.
+3. **One command** (`scripts/test.ps1`) builds RunlineCore and runs everything, with no Unreal needed.
 4. **In Unreal:** a few automation tests that load the greybox map and run scripted inputs through the real component. These check the adapter, not the logic.
 5. **Feel:** checked only by playtesting (you, plus 3–5 classmates at M3).
 
@@ -64,8 +64,8 @@ Unreal/Faith/       UE5 project
 
 | # | Weeks (dates) | Deliverable |
 |---|---|---|
-| M0 | 1 (Oct 12–18) | Git and LFS repo, UE 5.8 C++ project, CMake FaithCore skeleton, doctest, `CLAUDE.md`, `CREDITS.md`. Rust installed, faith_move's tests pass, the golden tool writes collision golden data. |
-| M1 | 2–7 (Oct 19–Nov 29) | FaithCore: World, BoxWorld, MeshWorld (triangle scenes, needed for `mesh_tests`) and collide-and-slide, locomotion, jump and landing, vault and step-up, wallrun, wallclimb, ledge, slide, roll, 180 turn and kick. All their tests and golden traces pass. Split into several plans (collision, then locomotion and jump, then the wall moves, then the rest). |
+| M0 | 1 (Oct 12–18) | Git and LFS repo, UE 5.8 C++ project, CMake RunlineCore skeleton, doctest, `CLAUDE.md`, `CREDITS.md`. Rust installed, faith_move's tests pass, the golden tool writes collision golden data. |
+| M1 | 2–7 (Oct 19–Nov 29) | RunlineCore: World, BoxWorld, MeshWorld (triangle scenes, needed for `mesh_tests`) and collide-and-slide, locomotion, jump and landing, vault and step-up, wallrun, wallclimb, ledge, slide, roll, 180 turn and kick. All their tests and golden traces pass. Split into several plans (collision, then locomotion and jump, then the wall moves, then the rest). |
 | M2 | 8–10 (Nov 30–Dec 20) | In Unreal: the component, FUnrealWorld, Enhanced Input (keyboard and controller), CameraFx, template first-person arms, and faith-runner's Rooftops map imported by script. Light weeks expected (exams). |
 | — | 11–12 (Dec 21–Jan 3) | Holiday buffer: no planned work. |
 | M3 | 13–14 (Jan 4–17) | **Checkpoint (about 2027-01-17):** feel pass, playtests, clip, short write-up. Go/no-go. |

@@ -1,6 +1,6 @@
 #include <doctest/doctest.h>
-#include "faith/BoxWorld.h"
-using namespace faith;
+#include "runline/BoxWorld.h"
+using namespace runline;
 
 static BoxWorld Floor() {  // a 20 m slab whose top is at y = 0
     BoxWorld w; w.Add(Aabb::New({-10, -1, -10}, {10, 0, 10})); return w;

@@ -4,12 +4,12 @@
 #include <sstream>
 #include <string>
 #include <vector>
-#include "faith/BoxWorld.h"
-using namespace faith;
+#include "runline/BoxWorld.h"
+using namespace runline;
 
 namespace {
 std::vector<std::vector<float>> ReadCsv(const std::string& name) {
-    std::ifstream in(std::string(FAITH_GOLDEN_DIR) + "/" + name);
+    std::ifstream in(std::string(RUNLINE_GOLDEN_DIR) + "/" + name);
     std::vector<std::vector<float>> rows;
     std::string line;
     std::getline(in, line);  // header
@@ -68,7 +68,7 @@ TEST_CASE("golden: BoxWorld::Sweep matches faith_move") {
 }
 
 TEST_CASE("golden data records the faith-runner commit it came from") {
-    std::ifstream in(std::string(FAITH_GOLDEN_DIR) + "/REFERENCE");
+    std::ifstream in(std::string(RUNLINE_GOLDEN_DIR) + "/REFERENCE");
     std::string line;
     std::getline(in, line);
     REQUIRE_MESSAGE(line.rfind("faith-runner ", 0) == 0, "REFERENCE missing; run cargo run in tools/golden");

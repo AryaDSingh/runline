@@ -1,8 +1,8 @@
 #pragma once
 #include <vector>
-#include "faith/World.h"
+#include "runline/World.h"
 
-namespace faith {
+namespace runline {
 
 /// Axis-aligned boxes, scanned in full (the greybox levels). The grid index of the Rust
 /// version comes later, when real maps need it.
@@ -16,4 +16,4 @@ public:
     bool Overlaps(const Aabb& region) const override;
 };
 
-} // namespace faith
+} // namespace runline

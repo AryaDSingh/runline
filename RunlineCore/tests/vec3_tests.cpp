@@ -1,6 +1,6 @@
 #include <doctest/doctest.h>
-#include "faith/Vec3.h"
-using faith::Vec3;
+#include "runline/Vec3.h"
+using runline::Vec3;
 
 TEST_CASE("Vec3 arithmetic and indexing") {
     Vec3 a{1, 2, 3}, b{4, -5, 6};

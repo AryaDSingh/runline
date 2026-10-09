@@ -1,7 +1,7 @@
 #pragma once
 #include <algorithm>
 
-namespace faith {
+namespace runline {
 
 // The subset of glam::Vec3 that faith_move uses. Metres, Y up.
 struct Vec3 {
@@ -21,4 +21,4 @@ struct Vec3 {
     Vec3 Clamp(Vec3 lo, Vec3 hi) const { return Max(lo, Min(hi, *this)); }
 };
 
-} // namespace faith
+} // namespace runline

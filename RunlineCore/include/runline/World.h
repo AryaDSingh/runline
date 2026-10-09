@@ -1,8 +1,8 @@
 #pragma once
 #include <optional>
-#include "faith/Vec3.h"
+#include "runline/Vec3.h"
 
-namespace faith {
+namespace runline {
 
 // Port of faith_move::world. Everything the controller knows about the level goes through
 // World: sweep the player's box through it (first contact, with the surface normal) and ask
@@ -44,4 +44,4 @@ public:
     bool IsFree(const Aabb& region) const { return !Overlaps(region); }
 };
 
-} // namespace faith
+} // namespace runline

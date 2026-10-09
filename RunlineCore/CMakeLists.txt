@@ -1,0 +1,27 @@
+cmake_minimum_required(VERSION 3.24)
+project(RunlineCore CXX)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+add_library(RunlineCore STATIC src/BoxWorld.cpp)
+target_include_directories(RunlineCore PUBLIC include)
+if(MSVC)
+  target_compile_options(RunlineCore PRIVATE /W4 /fp:strict)
+endif()
+
+include(FetchContent)
+FetchContent_Declare(doctest
+  GIT_REPOSITORY https://github.com/doctest/doctest.git
+  GIT_TAG v2.5.3)   # 2.4.x declares cmake_minimum_required(3.0), which CMake 4 rejects
+FetchContent_MakeAvailable(doctest)
+
+add_executable(RunlineCoreTests
+  tests/test_main.cpp tests/vec3_tests.cpp tests/world_tests.cpp tests/golden_tests.cpp)
+target_link_libraries(RunlineCoreTests PRIVATE RunlineCore doctest::doctest)
+target_compile_definitions(RunlineCoreTests PRIVATE
+  RUNLINE_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden")
+if(MSVC)
+  target_compile_options(RunlineCoreTests PRIVATE /fp:strict)
+endif()
+enable_testing()
+add_test(NAME RunlineCoreTests COMMAND RunlineCoreTests)

@@ -1,4 +1,4 @@
-//! Writes reference results from faith-runner's faith_move for FaithCore's golden tests.
+//! Writes reference results from faith-runner's faith_move for RunlineCore's golden tests.
 use faith_move::world::{Aabb, BoxWorld, World};
 use glam::Vec3;
 use std::fmt::Write as _;
@@ -98,7 +98,7 @@ fn main() {
         out.push_str(&row(&w, half, start, delta));
     }
 
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../FaithCore/tests/golden");
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../RunlineCore/tests/golden");
     std::fs::create_dir_all(dir).unwrap();
     std::fs::write(format!("{dir}/scene.csv"), scene).unwrap();
     std::fs::write(format!("{dir}/sweeps.csv"), out).unwrap();

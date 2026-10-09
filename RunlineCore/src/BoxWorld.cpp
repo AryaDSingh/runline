@@ -1,8 +1,8 @@
-#include "faith/BoxWorld.h"
+#include "runline/BoxWorld.h"
 #include <cmath>
 #include <limits>
 
-namespace faith {
+namespace runline {
 namespace {
 
 /// How far a box may be inside something and still only be touching it.
@@ -90,4 +90,4 @@ bool BoxWorld::Overlaps(const Aabb& region) const {
     return false;
 }
 
-} // namespace faith
+} // namespace runline
