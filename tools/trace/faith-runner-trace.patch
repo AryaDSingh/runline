@@ -53,10 +53,10 @@ index 5efc4e5..b7eb74b 100644
  mod rooftops_tests;
 diff --git a/crates/faith_move/src/runline_scenarios.rs b/crates/faith_move/src/runline_scenarios.rs
 new file mode 100644
-index 0000000..a4a5435
+index 0000000..298909b
 --- /dev/null
 +++ b/crates/faith_move/src/runline_scenarios.rs
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,118 @@
 +//! (Runline trace patch) Scenarios faith-runner's own tests don't cover, recorded only so
 +//! RunlineCore's replays can check them: the jump buffer (jump pressed in the air just before
 +//! touchdown) and the walk-off coyote jump (jump pressed just after running off a ledge). They
@@ -120,6 +120,61 @@ index 0000000..a4a5435
 +fn coyote_n07() { coyote(7) }
 +#[test]
 +fn coyote_n09() { coyote(9) }
++
++/// A floor and a long wall, too tall to climb to the top of, whose face is at z = -2 (facing +z).
++fn wall_world() -> BoxWorld {
++    let mut w = floor();
++    w.add(Aabb::new(Vec3::new(-30.0, 0.0, -3.0), Vec3::new(30.0, 10.0, -2.0)));
++    w
++}
++
++/// Running at the wall `deg` degrees off parallel and jumping just before it: FindWallForward
++/// only takes a wall you face at most WallRunningForwardMaxStartAngle (57 degrees) into.
++fn wall_approach(deg: f32) {
++    let w = wall_world();
++    let a = deg.to_radians();
++    let fwd = Vec3::new(a.cos(), 0.0, -a.sin());
++    let yaw = (-fwd.x).atan2(-fwd.z);
++    let start = Vec3::new(0.0, 0.0, -1.7) - fwd * 8.0;
++    let mut c = Controller::new(Tuning::default(), start, yaw);
++    c.state = State::Ground;
++    let mut jumped = false;
++    for _ in 0..150 {
++        let near = c.feet.z < -1.7 + 0.9;
++        let press = near && !jumped;
++        jumped |= press;
++        let i = Input { move_axis: Vec2::new(0.0, 1.0), jump_pressed: press, jump_held: press, ..Default::default() };
++        c.step(DT, &i, &w);
++    }
++}
++
++#[test]
++fn wall_approach_50() { wall_approach(50.0) }
++#[test]
++fn wall_approach_56() { wall_approach(56.0) }
++#[test]
++fn wall_approach_58() { wall_approach(58.0) }
++#[test]
++fn wall_approach_65() { wall_approach(65.0) }
++
++/// Wallclimbing, turning round with Q, then not kicking: after the kick window she drops off.
++#[test]
++fn wallclimb_turn_no_kick() {
++    let w = wall_world();
++    let mut c = Controller::new(Tuning::default(), Vec3::new(0.0, 0.0, 4.0), 0.0);
++    c.state = State::Ground;
++    let mut jumped = false;
++    let mut turned = false;
++    for _ in 0..150 {
++        let press = c.feet.z < -1.7 + 0.9 && !jumped;
++        jumped |= press;
++        let turn = matches!(c.state, State::WallClimb { .. }) && !turned;
++        turned |= turn;
++        let fwd = if turned { 0.0 } else { 1.0 };
++        let i = Input { move_axis: Vec2::new(0.0, fwd), jump_pressed: press, jump_held: press, turn_pressed: turn, ..Default::default() };
++        c.step(DT, &i, &w);
++    }
++}
 diff --git a/crates/faith_move/src/trace.rs b/crates/faith_move/src/trace.rs
 new file mode 100644
 index 0000000..16191f7

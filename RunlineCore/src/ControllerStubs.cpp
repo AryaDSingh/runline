@@ -48,16 +48,12 @@ bool Controller::TryGrabFixture(const World&) { return false; }
 // NOT PORTED: vault.rs plan (M1d, vaults): the jump's vault check.
 bool Controller::TryVault(const Input&, const World&) { return false; }
 
-// NOT PORTED: controller.rs find_wallrun (M1d, wallrun): FindWallSide / FindWallForward.
-std::optional<WallFound> Controller::FindWallrun(const Input&, const World&) const { return std::nullopt; }
-
 // NOT PORTED: controller.rs soft_below / check_barbed_wire (M4): both look for fixtures (SoftPad,
 // BarbedWire), and the C++ World has none until fixtures are ported.
 bool Controller::SoftBelow(const World&, float) const { return false; }
 void Controller::CheckBarbedWire(const World&) {}
 
-// NOT PORTED: the states the core can enter but doesn't run yet (M1d: Slide, Roll, WallRun,
-// WallClimb, WallClimbTurned, LedgeHang; M4: SoftLand, LayOnGround).
+// NOT PORTED: the states the core can enter but doesn't run yet (M1d: Slide, Roll, LedgeHang; M4: SoftLand, LayOnGround).
 void Controller::UnportedState(const State& s, float, const Input&, const World&) {
     throw NotPorted(std::string("state ") + StateName(s));
 }

@@ -355,6 +355,9 @@ void Controller::Substep(float dt, const Input& input, const World& world) {
     if (Is<Ground>(state)) GroundState(dt, input, world);
     else if (Is<Air>(state)) AirState(dt, input, world);
     else if (const auto* s = std::get_if<Stunned>(&state)) StunnedState(dt, s->t, world);
+    else if (const auto* w = std::get_if<WallRun>(&state)) WallRunState(dt, w->normal, w->t, input, world);
+    else if (const auto* c = std::get_if<WallClimb>(&state)) WallClimbState(dt, c->normal, c->t, input, world);
+    else if (const auto* k = std::get_if<WallClimbTurned>(&state)) WallClimbTurnedState(dt, k->normal, k->t, world);
     else UnportedState(state, dt, input, world);
 
     CheckBarbedWire(world);
@@ -846,6 +849,209 @@ void Controller::UpdateView(float dt) {
 View Controller::GetView() const { return View{feet + Vec3::UnitY() * eyeHeight_, yaw, pitch, 0.0f, 90.0f}; }
 
 Vec3 Controller::Root() const { return Vec3{feet.x, BodyY(), feet.z}; }
+
+// ---------------------------------------------------------------- walls
+
+/// The wall search in TdMove_WallRun.CanDoMove: the native FindWallSide when you're strafing
+/// toward a wall right as you jump, otherwise FindWallForward.
+std::optional<WallFound> Controller::FindWallrun(const Input& input, const World& world) const {
+    const Tuning& tu = tuning;
+    const Body body = GetBody();
+    const Vec3 fwd = ForwardOf(yaw);
+    const Vec3 h = Horiz(vel);
+    const float speed = h.Length();
+    // Both look for wall at MinWallHeight - 2 above the feet.
+    const float top = tu.wallrunMinWallHeight - Uu(2.0f);
+    const auto sameWall = [&](Vec3 n) { return lastWallNormal_ && lastWallNormal_->Dot(n) > 0.9f; };
+    // Which way along the wall you'd run: the tangent on the side you face.
+    const auto along = [&](Vec3 n) {
+        const Vec3 t{n.z, 0.0f, -n.x};
+        return t.Dot(fwd) < 0.0f ? -t : t;
+    };
+
+    // MoveActionHint left/right only counts within 30 units of LastJumpLocation.
+    const bool sideHint = (feet - lastJumpAt_).Length() < Uu(30.0f) && std::fabs(input.moveAxis.x) > 0.3f;
+    const auto side = [&]() -> std::optional<WallHit> {
+        const Vec3 dir = RightOf(yaw) * Signum(input.moveAxis.x);
+        const auto hi = TraceWall(world, body, feet, dir, tu.wallrunReach, top);
+        if (!hi) return std::nullopt;
+        if (std::fabs(hi->n.Dot(dir)) < std::cos(tu.wallrunStrafeStartDeg * (kPi / 180.0f)) || sameWall(hi->n)) return std::nullopt;
+        if (vel.Dot(along(hi->n)) < 0.0f) return std::nullopt;
+        // The same wall again just above step height, and near enough vertical between the two
+        // (the direction from one hit to the other at least 0.96 up).
+        const auto lo = TraceWall(world, body, feet, dir, tu.wallrunReach, tu.stepHeight + Uu(2.0f));
+        if (!lo) return std::nullopt;
+        const float rise = top - tu.stepHeight - Uu(2.0f);
+        const float off = std::fabs((hi->at - lo->at).Dot(hi->n));
+        if (lo->n.Dot(hi->n) > 0.999f && rise / std::sqrt(rise * rise + off * off) >= 0.96f) return hi;
+        return std::nullopt;
+    };
+    const auto ahead = [&]() -> std::optional<WallHit> {
+        // The reach grows from WallRunningForwardCheckDistance at SpeedMaxBase to
+        // ContextMoveDistanceMultiplier times it at GroundSpeed.
+        const Locomotion& l = tu.loco;
+        const float frac = FMax(speed - l.maxBase, 0.0f) / (l.groundSpeed - l.maxBase);
+        const float reach = ((tu.contextMoveDistanceMultiplier - 1.0f) * frac + 1.0f) * tu.wallrunReach;
+        const auto mid = TraceWall(world, body, feet, fwd, reach, body.height * 0.5f);
+        if (!mid) return std::nullopt;
+        // Facing at most WallRunningForwardMaxStartAngle into the wall (MinStartAngle is 0).
+        const float d = -mid->n.Dot(fwd);
+        if (d > std::cos((90.0f - tu.wallrunMaxApproachDeg) * (kPi / 180.0f)) || sameWall(mid->n)) return std::nullopt;
+        // Tall enough: the wall again up at MinWallHeight, 50 units lower the squarer you face it.
+        if (!TraceWall(world, body, feet, fwd, reach, top - (1.0f - d) * Uu(50.0f))) return std::nullopt;
+        if (vel.Dot(along(mid->n)) < 0.0f) return std::nullopt;
+        return mid;
+    };
+    std::optional<WallHit> hit;
+    if (sideHint) {
+        hit = side();
+        if (!hit) hit = ahead();
+    } else {
+        hit = ahead();
+    }
+    if (!hit) return std::nullopt;
+
+    // Back in CanDoMove: you have to be moving into the wall.
+    if (h.Dot(hit->n) >= 0.0f) return std::nullopt;
+    // Falling: no wallrun if there's ground just under where the run would take you (a cylinder
+    // height below the feet, half a second of travel ahead, 45 units down).
+    if (vel.y < 0.0f) {
+        const Vec3 start = Vec3{hit->at.x, feet.y - body.height * 0.5f, hit->at.z} + hit->n * body.halfWidth;
+        const Vec3 end = start + along(hit->n) * speed * 0.5f - Vec3::UnitY() * Uu(45.0f);
+        const auto steps = static_cast<std::size_t>(FMax(std::ceil((end - start).Length() / 0.05f), 1.0f));
+        for (std::size_t i = 0; i <= steps; ++i) {
+            // glam's lerp: self * (1 - s) + rhs * s.
+            const float s = static_cast<float>(i) / static_cast<float>(steps);
+            const Vec3 p = start * (1.0f - s) + end * s;
+            if (!world.IsFree(Aabb::FromCenterSize(p, Vec3::Splat(Uu(2.0f))))) return std::nullopt;
+        }
+    }
+    return hit;
+}
+
+void Controller::WallRunState(float dt, Vec3 n, float t, const Input& input, const World& world) {
+    if (TryIntoClimb(input, world)) return;
+    const Tuning& tu = tuning;
+    t = t + dt;
+    const Body body = GetBody();
+    const Vec3 h = Horiz(vel);
+    const Vec3 alongDir = (h - n * h.Dot(n)).NormalizeOrZero();
+    float speed = h.Dot(alongDir);
+
+    const Vec3 strafeDir = RightOf(yaw) * Signum(input.moveAxis.x);
+    if (jumpBuffer_ > 0.0f && t > 0.1f && std::fabs(input.moveAxis.x) >= tu.wallrunDodgeThreshold && strafeDir.Dot(n) > 0.0f) {
+        Dodge(strafeDir, tu.wallrunDodgeSide, tu.wallrunDodgeUp, tu.wallrunDodgeInertia);
+        lastWallNormal_ = n;
+        Event e{EventKind::WallRunDodge};
+        e.dir = strafeDir;
+        events.push_back(e);
+        return;
+    }
+    const float chain = static_cast<float>(1 + chainWallruns_);
+    if (jumpBuffer_ > 0.0f && t > 0.1f) {
+        // TdMove_WallrunJump.StartMove. `push` is how far you look away from the wall: it pushes
+        // you out harder and higher, and trades away along-wall speed. After Q (bTurned90FromWall)
+        // it takes the wall normal itself: the full push-off.
+        const float push = wallTurned_ ? 1.0f : FMax(ForwardOf(yaw).Dot(n), 0.0f);
+        const float height = Headroom(world, tu.wallrunJumpHeight + tu.wallrunJumpHeightTurnedAdd * push);
+        const float up = tu.SpeedForHeight(height) / chain;
+        const float out = tu.wallrunJumpOut + tu.wallrunJumpOutLookAdd * push;
+        const float keep = tu.wallrunJumpForwardMin + (1.0f - tu.wallrunJumpForwardMin) * (1.0f - push);
+        const Vec3 along = h - n * h.Dot(n);
+        vel = n * out + along * keep + Vec3::UnitY() * up;
+        lastJumpAt_ = feet;
+        state = Air{};
+        airTime_ = 0.0f;
+        jumpedSinceGround_ = true;
+        jumpBuffer_ = 0.0f;
+        takeoff_ = Takeoff::WallJump;
+        events.push_back({EventKind::WallJump});
+        return;
+    }
+
+    const auto probe = ProbeWall(world, body, feet, -n, 0.12f, 0.3f, 1.5f);
+    const bool stillWall = probe && probe->n.Dot(n) > 0.9f;
+    const bool fallingTooFast = vel.y < -tu.wallrunStopFallSpeed;
+    if (fallingTooFast || !stillWall || input.crouchPressed || input.moveAxis.y < -0.3f) {
+        state = Air{};
+        return;
+    }
+
+    // UTdMove_WallRun's per-frame update and ATdPawn::physWallRunning: no acceleration asked for;
+    // the velocity is kept along the wall with a slight drag, and you're pulled down at
+    // WallRunningHorisontalAcceleration while rising and ...Deceleration while falling, both
+    // x (1 + ConsequtiveWallruns).
+    speed = speed - speed * tu.wallrunFriction * dt;
+    if (speed < 0.1f) {
+        state = Air{};
+        return;
+    }
+    const float pull = (vel.y > 0.0f ? tu.wallrunAccel : tu.wallrunDecel) * chain;
+    vel = alongDir * speed - n * 0.5f + Vec3::UnitY() * (vel.y - pull * dt);
+    state = WallRun{n, t};
+    Integrate(dt, world, false);
+}
+
+void Controller::WallClimbState(float dt, Vec3 n, float t, const Input& input, const World& world) {
+    const Tuning& tu = tuning;
+    t = t + dt;
+    const Body body = GetBody();
+
+    if (jumpBuffer_ > 0.0f && std::fabs(input.moveAxis.x) >= tu.wallclimbDodgeThreshold) {
+        // Sideways along the wall face.
+        Vec3 along = Vec3{n.z, 0.0f, -n.x} * Signum(input.moveAxis.x);
+        if (along.Dot(RightOf(yaw) * Signum(input.moveAxis.x)) < 0.0f) along = -along;
+        Dodge(along, tu.wallclimbDodgeSide, tu.wallclimbDodgeUp, tu.wallclimbDodgeInertia);
+        vel += n * 0.5f;   // off the wall slightly
+        lastWallNormal_ = n;
+        Event e{EventKind::WallClimbDodge};
+        e.dir = along;
+        events.push_back(e);
+        return;
+    }
+
+    const float hi = tu.hangHandsAboveFeet + tu.ledgeGrabHiExtra;
+    if (const auto top = FindLedge(world, body, feet, n, 0.9f, hi, tu.crouchHeight)) {
+        GrabLedge(n, 0.0f, *top, world);
+        return;
+    }
+    const bool stillWall = ProbeWall(world, body, feet, -n, 0.12f, 0.2f, body.height - 0.1f).has_value();
+    if (vel.y <= 0.0f || !stillWall) {
+        state = Air{};
+        return;
+    }
+    // UTdMove_WallClimb's per-frame update: the pawn's acceleration is just (0, 0,
+    // -WallClimbingGravity), with no drag on the climb itself.
+    const float vy = vel.y - tu.wallclimbGravity * dt;
+    vel = -n * 0.3f + Vec3::UnitY() * vy;
+    state = WallClimb{n, t};
+    Integrate(dt, world, false);
+}
+
+void Controller::WallClimbTurnedState(float dt, Vec3 n, float t, const World& world) {
+    const Tuning& tu = tuning;
+    t = t + dt;
+    if (jumpBuffer_ > 0.0f) {
+        // TdMove_WallClimb180TurnJump.JumpFromWall (a ceiling cuts the height).
+        vel = n * tu.wallkickOut + Vec3::UnitY() * tu.SpeedForHeight(Headroom(world, tu.wallkickHeight));
+        lastJumpAt_ = feet;
+        state = Air{};
+        airTime_ = 0.0f;
+        jumpedSinceGround_ = true;
+        jumpBuffer_ = 0.0f;
+        lastWallNormal_ = n;
+        events.push_back({EventKind::WallKick});
+        return;
+    }
+    if (t > tu.wallkickWindow) {
+        state = Air{};
+        return;
+    }
+    // Slowly slide down the wall while we decide.
+    vel = -n * 0.3f + Vec3::UnitY() * (FMin(vel.y, 0.5f) - tu.gravity * 0.25f * dt);
+    state = WallClimbTurned{n, t};
+    Integrate(dt, world, false);
+}
 
 /// Melee's speed log: a quarter second of (dt, speed) samples, kept every frame. The attacks
 /// themselves are ported later; none can start until then.

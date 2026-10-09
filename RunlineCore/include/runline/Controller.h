@@ -275,6 +275,10 @@ private:
     void Land(float impact, const World& world);
     bool SoftBelow(const World& world, float depth) const;
     void StunnedState(float dt, float t, const World& world);
+    void WallRunState(float dt, Vec3 n, float t, const Input& input, const World& world);
+    void WallClimbState(float dt, Vec3 n, float t, const Input& input, const World& world);
+    void WallClimbTurnedState(float dt, Vec3 n, float t, const World& world);
+    std::optional<WallFound> FindWallrun(const Input& input, const World& world) const;
     void CheckBarbedWire(const World& world);
     void Integrate(float dt, const World& world, bool onGround);
     void OffsetMesh(float d);
@@ -299,7 +303,6 @@ private:
     bool TryVertigo(const World& world);
     bool TryGrabFixture(const World& world);
     bool TryVault(const Input& input, const World& world);
-    std::optional<WallFound> FindWallrun(const Input& input, const World& world) const;
     void UnportedState(const State& s, float dt, const Input& input, const World& world);
 };
 
