@@ -106,7 +106,38 @@ struct WallClimb { Vec3 normal{}; float t = 0.0f; };
 struct WallClimbTurned { Vec3 normal{}; float t = 0.0f; };
 struct LedgeHang { Vec3 normal{}; float ledgeY = 0.0f; bool turned = false; };
 
-using State = std::variant<Ground, Air, Slide, Roll, Stunned, SoftLand, LayOnGround, WallRun, WallClimb, WallClimbTurned, LedgeHang>;
+enum class TraverseKind {
+    Vault,
+    Mantle,
+    PullUp,
+    /// Foot plant on an obstacle, then launch (TdMove_SpringBoard).
+    SpringBoard,
+};
+/// A scripted move from `from` to `to` over `dur` seconds (the pull-up, the springboard).
+struct Traverse {
+    TraverseKind kind = TraverseKind::PullUp;
+    Vec3 from{};
+    Vec3 to{};
+    float t = 0.0f;
+    float dur = 0.0f;
+    float arc = 0.0f;
+    Vec3 exitVel{};
+};
+
+/// A shimmy along a ledge (TdMove_Grab.StartShimmy / StartShimmyAroundCorner).
+struct Shimmy {
+    /// +1 to the right as you face the wall, -1 to the left.
+    float dir = 0.0f;
+    /// Seconds into this step (or the corner).
+    float t = 0.0f;
+    Vec3 from{};
+    Vec3 to{};
+    /// Going round an outside corner onto the face with this normal.
+    std::optional<Vec3> corner;
+    float yawFrom = 0.0f;
+};
+
+using State = std::variant<Ground, Air, Slide, Roll, Stunned, SoftLand, LayOnGround, WallRun, WallClimb, WallClimbTurned, LedgeHang, Traverse>;
 /// State::name(): what the HUD (and the trace) calls it.
 const char* StateName(const State& s);
 
@@ -189,6 +220,8 @@ public:
     float meshOffset = 0.0f;
     /// Seconds since grabbing the current ledge.
     float hangTime = 0.0f;
+    /// Shimmying along (or round the corner of) the ledge you hang from.
+    std::optional<Shimmy> shimmy;
 
     /// Advance by `dt` seconds.
     void Step(float dt, const Input& input, const World& world);
@@ -279,6 +312,10 @@ private:
     void WallClimbState(float dt, Vec3 n, float t, const Input& input, const World& world);
     void WallClimbTurnedState(float dt, Vec3 n, float t, const World& world);
     std::optional<WallFound> FindWallrun(const Input& input, const World& world) const;
+    void HangState(float dt, Vec3 n, float ledgeY, const Input& input, const World& world);
+    void ShimmyUpdate(float dt, Vec3 n, float ledgeY, const Input& input, const World& world);
+    void TraverseState(float dt, Traverse tr, const World& world);
+    void MoveBy(Vec3 d, const World& world);
     void CheckBarbedWire(const World& world);
     void Integrate(float dt, const World& world, bool onGround);
     void OffsetMesh(float d);
@@ -302,6 +339,7 @@ private:
     void SpringboardRunIn(float dt, const World& world);
     bool TryVertigo(const World& world);
     bool TryGrabFixture(const World& world);
+    bool TryGrabTransfer(Vec3 n, float ledgeY, const World& world);
     bool TryVault(const Input& input, const World& world);
     void UnportedState(const State& s, float dt, const Input& input, const World& world);
 };

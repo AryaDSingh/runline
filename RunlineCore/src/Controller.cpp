@@ -1,5 +1,6 @@
 #include "runline/Controller.h"
 #include <cmath>
+#include <algorithm>
 #include <limits>
 #include "runline/Probes.h"
 
@@ -72,6 +73,14 @@ const char* StateName(const State& s) {
     if (Is<WallClimbTurned>(s)) return "Wallclimb (turned)";
     if (const auto* h = std::get_if<LedgeHang>(&s)) return h->turned ? "Ledge hang (turned)" : "Ledge hang";
     if (Is<SoftLand>(s)) return "Soft landing";
+    if (const auto* tr = std::get_if<Traverse>(&s)) {
+        switch (tr->kind) {
+            case TraverseKind::Vault: return "Vault";
+            case TraverseKind::Mantle: return "Mantle";
+            case TraverseKind::PullUp: return "Pull up";
+            case TraverseKind::SpringBoard: return "Springboard";
+        }
+    }
     const auto& l = std::get<LayOnGround>(s);
     if (l.backRoll) return "Back roll";
     if (!l.gettingUp) return "On your back";
@@ -358,6 +367,8 @@ void Controller::Substep(float dt, const Input& input, const World& world) {
     else if (const auto* w = std::get_if<WallRun>(&state)) WallRunState(dt, w->normal, w->t, input, world);
     else if (const auto* c = std::get_if<WallClimb>(&state)) WallClimbState(dt, c->normal, c->t, input, world);
     else if (const auto* k = std::get_if<WallClimbTurned>(&state)) WallClimbTurnedState(dt, k->normal, k->t, world);
+    else if (const auto* l = std::get_if<LedgeHang>(&state)) HangState(dt, l->normal, l->ledgeY, input, world);
+    else if (const auto* tr = std::get_if<Traverse>(&state)) TraverseState(dt, *tr, world);
     else UnportedState(state, dt, input, world);
 
     CheckBarbedWire(world);
@@ -668,6 +679,7 @@ void Controller::GrabLedge(Vec3 n, float gap, float top, const World& world) {
     vel = Vec3::Zero();
     state = LedgeHang{n, top, false};
     hangTime = 0.0f;
+    shimmy.reset();
     jumpBuffer_ = 0.0f;
     events.push_back({EventKind::LedgeGrab});
 }
@@ -1051,6 +1063,191 @@ void Controller::WallClimbTurnedState(float dt, Vec3 n, float t, const World& wo
     vel = -n * 0.3f + Vec3::UnitY() * (FMin(vel.y, 0.5f) - tu.gravity * 0.25f * dt);
     state = WallClimbTurned{n, t};
     Integrate(dt, world, false);
+}
+
+// ---------------------------------------------------------------- ledges
+
+void Controller::MoveBy(Vec3 d, const World& world) {
+    const Body body = GetBody();
+    SlideMove(world, body, feet, d);
+}
+
+void Controller::HangState(float dt, Vec3 n, float ledgeY, const Input& input, const World& world) {
+    const Tuning& tu = tuning;
+    vel = Vec3::Zero();
+    hangTime += dt;
+    // TdMove_Grab.UpdateViewRotation: the body stays facing the wall and you're "turned" once the
+    // view is more than StartTurningAngle (90 degrees) off it.
+    const bool turned = ForwardOf(yaw).Dot(-n) < 0.0f;
+    if (!shimmy) state = LedgeHang{n, ledgeY, turned};
+
+    if (turned) {
+        if (jumpBuffer_ > 0.0f) {
+            vel = n * tu.hangJumpOut + Vec3::UnitY() * tu.SpeedForHeight(tu.hangJumpHeight);
+            state = Air{};
+            airTime_ = 0.0f;
+            jumpedSinceGround_ = true;
+            jumpBuffer_ = 0.0f;
+            regrabCooldown_ = 0.4f;
+            lastWallNormal_ = n;
+            events.push_back({EventKind::WallKick});
+        }
+        return;
+    }
+
+    if (input.crouchPressed) {
+        feet += n * 0.05f;
+        state = Air{};
+        airTime_ = 1.0f;
+        regrabCooldown_ = 0.35f;
+        return;
+    }
+
+    // Let the grab land first (the game's grab animation settles before you can heave up).
+    const bool settled = hangTime >= tu.hangSettleTime;
+    // TdMove_Grab's MA_Jump: a transfer to a ledge above first (pushing up), then the pull-up.
+    if (settled && jumpBuffer_ > 0.0f && input.moveAxis.y > 0.5f && TryGrabTransfer(n, ledgeY, world)) {
+        jumpBuffer_ = 0.0f;
+        return;
+    }
+    if (settled && (jumpBuffer_ > 0.0f || input.moveAxis.y > 0.5f)) {
+        jumpBuffer_ = 0.0f;
+        const Body stand{tu.halfWidth, tu.standHeight};
+        const Body crouch{tu.halfWidth, tu.crouchHeight};
+        Vec3 to = feet + -n * (2.0f * tu.halfWidth + 0.15f);
+        // Onto whatever's up there: a roof that slopes up from the lip (up to 0.9 m higher under
+        // her) as well as a flat top.
+        const auto tops = TopsBelow(world, Vec3{to.x, 0.0f, to.z}, tu.halfWidth, ledgeY + 0.9f, ledgeY - 0.1f);
+        const float surface = tops.empty() ? ledgeY : tops.front();
+        to = Vec3{to.x, FMax(surface, ledgeY) + 0.01f, to.z};
+        const bool endCrouched = !world.IsFree(stand.AabbAt(to));
+        if (endCrouched && !world.IsFree(crouch.AabbAt(to))) return;
+        crouched = endCrouched;
+        state = Traverse{TraverseKind::PullUp, feet, to, 0.0f, tu.pullupTime, 0.15f, Vec3::Zero()};
+        events.push_back({EventKind::PullUp});
+        return;
+    }
+
+    ShimmyUpdate(dt, n, ledgeY, input, world);
+}
+
+namespace {
+/// How far through its 60-unit step HangStrafeLeft/Right has carried the body, at eighths of the
+/// clip (the hands reach first, then the body swings over).
+constexpr float SHIMMY_PROFILE[9] = {0.0f, 0.0f, 0.0f, 0.22f, 0.5f, 0.75f, 0.92f, 1.0f, 1.0f};
+float ShimmyProgress(float u) {
+    const float x = FClamp(u, 0.0f, 1.0f) * 8.0f;
+    const auto i = std::min<std::size_t>(static_cast<std::size_t>(std::floor(x)), 7);
+    const float f = x - static_cast<float>(i);
+    return SHIMMY_PROFILE[i] + (SHIMMY_PROFILE[i + 1] - SHIMMY_PROFILE[i]) * f;
+}
+Vec3 Lerp(Vec3 a, Vec3 b, float s) { return a * (1.0f - s) + b * s; }   // glam's lerp
+} // namespace
+
+/// TdMove_Grab's shimmy: holding A or D steps hand over hand along the ledge, a 60-unit step per
+/// 1.07 s cycle of the clip, once DisableShimmyTime has passed and only while you look within 90
+/// degrees of the wall. A step always finishes. Where the ledge runs out at an outside corner you
+/// shimmy round it onto the next face.
+void Controller::ShimmyUpdate(float dt, Vec3 n, float ledgeY, const Input& input, const World& world) {
+    const Tuning& tu = tuning;
+    if (shimmy) {
+        Shimmy sh = *shimmy;
+        sh.t += dt;
+        const float len = sh.corner ? tu.shimmyCornerTime : tu.shimmyStepTime;
+        const float u = FMin(sh.t / len, 1.0f);
+        const float k = sh.corner ? Smoothstep(u) : ShimmyProgress(u);
+        feet = Lerp(sh.from, sh.to, k);
+        if (sh.corner) {
+            // Moving right round the corner turns you left to face the new face.
+            const float toYaw = sh.yawFrom + sh.dir * kPi * 0.5f;
+            yaw = sh.yawFrom + (toYaw - sh.yawFrom) * Smoothstep(u);
+            if (u >= 1.0f) state = LedgeHang{*sh.corner, ledgeY, false};
+        }
+        if (u < 1.0f) {
+            shimmy = sh;
+            return;
+        }
+        shimmy.reset();
+    }
+
+    float dir;
+    if (input.moveAxis.x > 0.3f) dir = 1.0f;
+    else if (input.moveAxis.x < -0.3f) dir = -1.0f;
+    else return;
+    const bool facingWall = ForwardOf(yaw).Dot(-n) > 0.0f;
+    if (hangTime < tu.shimmyDelay || !facingWall) return;
+    const Vec3 side = Vec3{n.z, 0.0f, -n.x} * dir;
+    const Body body = GetBody();
+    // The hands, at the body's centre line, have to stay on the ledge: solid wall just in front of
+    // them, under the lip.
+    const auto hangsAt = [&](Vec3 p, Vec3 nn) {
+        const Vec3 lip = Vec3{p.x, ledgeY - 0.05f, p.z} - nn * (tu.halfWidth + 0.05f);
+        if (!world.IsFree(body.AabbAt(p))) return false;
+        if (world.IsFree(Aabb::FromCenterSize(lip, Vec3::Splat(0.02f)))) return false;
+        const auto y = FindLedge(world, body, p, nn, tu.hangHandsAboveFeet - 0.1f, tu.hangHandsAboveFeet + 0.1f, tu.crouchHeight);
+        return y && std::fabs(*y - ledgeY) <= 0.05f;
+    };
+    // As far along as the ledge carries on, up to a full step.
+    float reach = 0.0f;
+    while (reach < tu.shimmyStep - 1e-4f) {
+        const float next = FMin(reach + 0.05f, tu.shimmyStep);
+        if (!hangsAt(feet + side * next, n)) break;
+        reach = next;
+    }
+    if (reach >= 0.1f) {
+        const Vec3 to = feet + side * reach;
+        shimmy = Shimmy{dir, 0.0f, feet, to, std::nullopt, yaw};
+        return;
+    }
+    // Round an outside corner: the wall ends just beside you and its side face carries the same
+    // ledge.
+    const auto hit = TraceWall(world, body, feet, -n, 0.6f, ledgeY - feet.y - 0.1f);
+    if (!hit) return;
+    // Where the wall ends beside us: step a thin probe along it until it stops finding it.
+    const float probeY = ledgeY - feet.y - 0.1f;
+    const Body thin{0.01f, body.height};
+    const Vec3 face{hit->at.x, feet.y, hit->at.z};
+    std::optional<float> end;
+    float s = 0.0f;
+    while (s <= 0.6f) {
+        const Vec3 from = face + side * s + n * 0.05f;
+        const auto h = TraceWall(world, thin, from, -n, 0.15f, probeY);
+        if (!h || h->n.Dot(n) < 0.9f) {
+            end = s;
+            break;
+        }
+        s += 0.02f;
+    }
+    if (!end) return;
+    const Vec3 edge = face + side * *end;
+    const float off = Horiz(feet - hit->at).Dot(n);
+    if ((edge - feet).Dot(side) > tu.halfWidth + 0.15f) return;
+    const Vec3 to = edge + side * off - n * (tu.halfWidth + 0.05f);
+    const Vec3 around = edge + side * off + n * off;
+    if (hangsAt(to, side) && world.IsFree(body.AabbAt(around))) {
+        shimmy = Shimmy{dir, 0.0f, feet, to, side, yaw};
+        events.push_back({EventKind::ShimmyCorner});
+    }
+}
+
+void Controller::TraverseState(float dt, Traverse tr, const World& world) {
+    tr.t += dt / tr.dur;
+    const float s = Smoothstep(tr.t);
+    // Rise first, then move over: feels more like hands-on-ledge.
+    const float rise = Smoothstep(FMin(tr.t * 1.6f, 1.0f));
+    Vec3 p = Lerp(tr.from, tr.to, s);
+    p.y = tr.from.y + (tr.to.y - tr.from.y) * rise + tr.arc * std::sin(kPi * FMin(tr.t, 1.0f));
+    feet = p;
+    if (tr.t >= 1.0f) {
+        feet = tr.to;
+        vel = tr.exitVel;
+        airTime_ = 0.0f;
+        jumpedSinceGround_ = true;
+        if (tr.kind == TraverseKind::SpringBoard || !Grounded(world)) state = Air{};
+        else state = Ground{};
+    } else {
+        state = tr;
+    }
 }
 
 /// Melee's speed log: a quarter second of (dt, speed) samples, kept every frame. The attacks

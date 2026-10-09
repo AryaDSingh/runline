@@ -45,6 +45,10 @@ bool Controller::TryVertigo(const World&) { return false; }
 // NOT PORTED: controller.rs try_grab_fixture (M4): ziplines and swing poles; there are none.
 bool Controller::TryGrabFixture(const World&) { return false; }
 
+// NOT PORTED: grabtransfer.rs try_grab_transfer (M1d if a selected trace needs it, else M4): a
+// ledge-to-ledge transfer when pushing up on a hang.
+bool Controller::TryGrabTransfer(Vec3, float, const World&) { return false; }
+
 // NOT PORTED: vault.rs plan (M1d, vaults): the jump's vault check.
 bool Controller::TryVault(const Input&, const World&) { return false; }
 
@@ -53,7 +57,7 @@ bool Controller::TryVault(const Input&, const World&) { return false; }
 bool Controller::SoftBelow(const World&, float) const { return false; }
 void Controller::CheckBarbedWire(const World&) {}
 
-// NOT PORTED: the states the core can enter but doesn't run yet (M1d: Slide, Roll, LedgeHang; M4: SoftLand, LayOnGround).
+// NOT PORTED: the states the core can enter but doesn't run yet (M1d: Slide, Roll; M4: SoftLand, LayOnGround).
 void Controller::UnportedState(const State& s, float, const Input&, const World&) {
     throw NotPorted(std::string("state ") + StateName(s));
 }

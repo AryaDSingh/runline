@@ -24,13 +24,26 @@ State StateFromName(const std::string& name) {
     throw std::runtime_error("trace sets state " + name + ", which replay can't rebuild yet");
 }
 
-/// What a test set before a step (or before the first): the snapshot's fields.
-void Apply(Controller& c, const trace::Snapshot& s) {
+/// A starting state rebuilt from its full Rust Debug text (trace `state_debug`), for the states
+/// tests start in with a payload. So far: `LedgeHang { normal: Vec3(x, y, z), ledge_y: Y, turned: B }`.
+std::optional<State> StateFromDebug(const std::string& d) {
+    if (d.rfind("LedgeHang {", 0) != 0) return std::nullopt;
+    float x, y, z, ledgeY;
+    char turned[8] = {};
+    if (std::sscanf(d.c_str(), "LedgeHang { normal: Vec3(%f, %f, %f), ledge_y: %f, turned: %7[a-z] }", &x, &y, &z, &ledgeY, turned) != 5)
+        throw std::runtime_error("can't read state " + d);
+    return LedgeHang{{x, y, z}, ledgeY, std::string(turned) == "true"};
+}
+
+/// What a test set before a step (or before the first): the snapshot's fields. `debug` is the
+/// starting state's full text, when there is one.
+void Apply(Controller& c, const trace::Snapshot& s, const std::string& debug = "") {
     c.feet = s.feet;
     c.vel = s.vel;
     c.yaw = s.yaw;
     c.pitch = s.pitch;
-    c.state = StateFromName(s.state);
+    const auto full = StateFromDebug(debug);
+    c.state = full ? *full : StateFromName(s.state);
     c.crouched = s.crouched;
     c.sprintCharge = s.sprintCharge;
 }
@@ -94,7 +107,7 @@ std::string Replay(const trace::Trace& t) {
     if (t.frames.empty()) return "has no frames";
     // Controller::new at the recorded spawn, then whatever the test set before its first step.
     Controller c(Tuning{}, t.spawn, t.spawnYaw);
-    Apply(c, t.init);
+    Apply(c, t.init, t.initStateDebug);
     for (size_t i = 0; i < t.frames.size(); ++i) {
         const trace::Frame& f = t.frames[i];
         if (f.set) Apply(c, *f.set);
