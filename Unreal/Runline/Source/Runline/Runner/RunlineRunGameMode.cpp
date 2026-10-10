@@ -22,6 +22,7 @@ void ARunlineRunGameMode::InitGame(const FString& MapName, const FString& Option
 	if (!Name.IsEmpty()) CourseName = Name;
 	ShotAfter = UGameplayStatics::GetIntOption(Options, TEXT("shot"), 0);
 	bMenuAtStart = UGameplayStatics::GetIntOption(Options, TEXT("menu"), 0) != 0;
+	bAutorun = UGameplayStatics::GetIntOption(Options, TEXT("autorun"), 0) != 0;
 }
 
 void ARunlineRunGameMode::StartPlay()
@@ -34,6 +35,14 @@ void ARunlineRunGameMode::StartPlay()
 		{
 			if (ARunlineRunner* R = Cast<ARunlineRunner>(UGameplayStatics::GetPlayerPawn(this, 0))) R->ToggleMenu();
 		}, 1.0f, false);
+	}
+	if (bAutorun)
+	{
+		FTimerHandle Run;
+		GetWorldTimerManager().SetTimer(Run, [this]
+		{
+			if (ARunlineRunner* R = Cast<ARunlineRunner>(UGameplayStatics::GetPlayerPawn(this, 0))) R->Runline().SetMove(FVector2D(0.0, 1.0));
+		}, 0.5f, false);
 	}
 	if (ShotAfter <= 0.0f) return;
 	// Real time, not game time: game timers stop while the menu pauses the game.
@@ -56,7 +65,7 @@ void ARunlineRunGameMode::StartPlay()
 		}
 		if (bShot && Elapsed >= Shot + 2.0f)
 		{
-			Mode->GetWorld()->Exec(Mode->GetWorld(), TEXT("quit"));
+			FPlatformMisc::RequestExit(false);
 			return false;
 		}
 		return true;

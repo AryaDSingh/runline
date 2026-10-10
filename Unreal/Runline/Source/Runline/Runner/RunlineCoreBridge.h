@@ -9,5 +9,7 @@
 #endif
 THIRD_PARTY_INCLUDES_START
 #include "runline/BoxWorld.h"
+#include "runline/Camera.h"
 #include "runline/Controller.h"
+#include "runline/Look.h"
 THIRD_PARTY_INCLUDES_END

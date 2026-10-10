@@ -2,6 +2,11 @@
 #include "RunlineTestRunner.h"
 #include "RunlineTestWorld.h"
 #include "Components/CapsuleComponent.h"
+#include "RunlineSettings.h"
+THIRD_PARTY_INCLUDES_START
+#include "runline/Camera.h"
+#include "runline/Look.h"
+THIRD_PARTY_INCLUDES_END
 #include <bit>
 #include <vector>
 
@@ -38,6 +43,23 @@ namespace
 			for (const runline::Controller& C : After)
 				for (const runline::Event& E : C.events) N += E.kind == K ? 1 : 0;
 			return N;
+		}
+	};
+
+	/// Sets the player's settings for one test and puts them back after.
+	struct FSettingsScope
+	{
+		float Fov, Motion;
+		FSettingsScope(float InFov, float InMotion)
+		{
+			URunlineSettings& S = URunlineSettings::Get();
+			Fov = S.FieldOfView; Motion = S.CameraMotion;
+			S.FieldOfView = InFov; S.CameraMotion = InMotion;
+		}
+		~FSettingsScope()
+		{
+			URunlineSettings& S = URunlineSettings::Get();
+			S.FieldOfView = Fov; S.CameraMotion = Motion;
 		}
 	};
 
@@ -216,7 +238,7 @@ bool FRunlineMovementDeathCut::RunTest(const FString&)
 	TestEqual(TEXT("the core respawned her"), RW.Count(runline::EventKind::Death), 1);
 	RW.M().Advance(0.5f * Step);   // half way to the next step
 	const FVector Want = RunlineUnits::ToUnrealPosition(RW.M().Core().GetView().eye);
-	TestTrue(TEXT("the camera is at the respawn, not half way from the street"), RW.M().GetRenderEye().Equals(Want, 1e-3));
+	TestTrue(TEXT("the camera is at the respawn, not half way from the street"), RW.M().GetRenderBaseEye().Equals(Want, 1e-3));
 	return true;
 }
 
@@ -253,6 +275,119 @@ bool FRunlineMovementViewBetweenSteps::RunTest(const FString&)
 	const double Before = RW.M().GetRenderRotation().Yaw;
 	RW.M().AddLook(FVector2D(0.5, 0.0));
 	TestEqual(TEXT("dropped look isn't drawn"), RW.M().GetRenderRotation().Yaw, Before, 1e-6);
+	return true;
+}
+
+// The effects the runner shows are exactly faith-runner's: the LookLimiter and CameraFx run after
+// each step, as its app does.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineMovementEffectsMatch, "Runline.Movement.EffectsMatchCoreDirect",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineMovementEffectsMatch::RunTest(const FString&)
+{
+	FSettingsScope Scope(90.0f, 1.0f);
+	FRunnerWorld RW;
+	runline::BoxWorld Ref;
+	Ref.Add(runline::Aabb::New({-50.0f, -1.0f, -50.0f}, {50.0f, 0.0f, 50.0f}));
+	runline::Controller Bare(runline::Tuning{}, {0.0f, 0.0f, 0.0f}, 0.0f);
+	Bare.Respawn();
+	runline::LookLimiter Limiter;
+	runline::CameraFx Fx;
+	runline::Shot Shot;
+	// As faith-runner's app builds it: the stick clamped to length 1, the raw strafe kept.
+	runline::Input In;
+	In.moveAxis = runline::Vec2{0.3f, 1.0f}.ClampLengthMax(1.0f);
+	In.strafeRaw = 0.3f;
+	RW.M().SetMove(FVector2D(0.3, 1.0));
+	for (int32 I = 0; I < 120; ++I)
+	{
+		RW.M().Advance(Step);
+		Bare.Step(Step, In, Ref);
+		Limiter.Apply(Bare, Step);
+		Shot = Fx.Update(Step, Bare, In);
+	}
+	const runline::Shot& Got = RW.M().LastShot();
+	TestTrue(TEXT("same shot"), Same(Got.view.eye, Shot.view.eye) && Same(Got.view.yaw, Shot.view.yaw) && Same(Got.view.pitch, Shot.view.pitch)
+		&& Same(Got.view.roll, Shot.view.roll) && Same(Got.view.fovDeg, Shot.view.fovDeg) && Same(Got.stepPhase, Shot.stepPhase));
+	TestTrue(TEXT("she's bobbing (sprinting)"), Got.gait > 0.5f);
+	return true;
+}
+
+// Review Focus 3: a death cuts the effects too: no shake left, and the offsets don't sweep.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineMovementEffectsCut, "Runline.Movement.EffectsCutOnRespawn",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineMovementEffectsCut::RunTest(const FString&)
+{
+	FSettingsScope Scope(90.0f, 1.0f);
+	FRunnerWorld RW;
+	RW.M().SetMove(FVector2D(0.0, 1.0));
+	RW.M().Advance(60 * Step);
+	RW.M().MutableCore().feet = {0.0f, -39.99f, 0.0f};
+	RW.M().MutableCore().state = runline::Air{};
+	RW.M().MutableCore().vel = {0.0f, -10.0f, 0.0f};
+	RW.M().Advance(Step);
+	TestEqual(TEXT("the core respawned her"), RW.Count(runline::EventKind::Death), 1);
+	TestEqual(TEXT("no shake after dying"), RW.M().LastShot().shake, 0.0f);
+	RW.M().Advance(0.5f * Step);
+	const FVector Offset = RunlineUnits::ToUnrealPosition(RW.M().LastShot().view.eye) - RunlineUnits::ToUnrealPosition(RW.M().Core().GetView().eye);
+	TestTrue(TEXT("the effects' offset is the current one, not half way from the street"),
+		(RW.M().GetRenderEye() - RW.M().GetRenderBaseEye()).Equals(Offset, 1e-3));
+	TestTrue(TEXT("and the base eye is at the respawn"), RW.M().GetRenderBaseEye().Equals(RunlineUnits::ToUnrealPosition(RW.M().Core().GetView().eye), 1e-3));
+	return true;
+}
+
+// Review Focus 4: the unstepped look isn't drawn past the move's look limit.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineMovementPendingLimit, "Runline.Movement.PendingLookRespectsLimits",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineMovementPendingLimit::RunTest(const FString&)
+{
+	FSettingsScope Scope(90.0f, 0.0f);
+	FRunnerWorld RW;
+	RW.M().Advance(10 * Step);
+	// Hanging on a ledge you can look down only about 18 degrees (TdMove_Grab).
+	RW.M().MutableCore().state = runline::LedgeHang{{0.0f, 0.0f, 1.0f}, 1.8f, false};
+	const float Limit = runline::LookLimitFor(RW.M().Core()).pitchMin;
+	RW.M().AddLook(FVector2D(0.0, -1.0));
+	const double Shown = RW.M().GetRenderRotation().Pitch;
+	TestTrue(TEXT("not drawn below the limit"), Shown >= FMath::RadiansToDegrees(double(Limit)) - 1e-3);
+	return true;
+}
+
+// Review Focus 5: camera motion 0 leaves no bob, roll or shake (FOV and swan neck stay).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineMovementMotionZero, "Runline.Movement.CameraMotionZero",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineMovementMotionZero::RunTest(const FString&)
+{
+	FSettingsScope Scope(95.0f, 0.0f);
+	FRunnerWorld RW;
+	RW.M().SetMove(FVector2D(0.0, 1.0));
+	for (int32 F = 0; F < 200; ++F)
+	{
+		RW.M().Advance(1.0f / 144.0f);
+		if (F > 100)
+		{
+			if (RW.M().GetRenderRotation().Roll != 0.0) { AddError(TEXT("roll at camera motion 0")); break; }
+			if (!RW.M().GetRenderEye().Equals(RW.M().GetRenderBaseEye(), 1e-6)) { AddError(TEXT("bob at camera motion 0")); break; }
+		}
+	}
+	TestTrue(TEXT("she's running"), RW.M().LastShot().gait > 0.5f);
+	TestTrue(TEXT("FOV follows the setting (95, plus the sprint add)"), RW.M().GetRenderFov() >= 95.0f && RW.M().GetRenderFov() < 106.0f);
+	return true;
+}
+
+// The camera's roll tips the way camera.rs means it: wallrunning with the wall on her right she
+// leans away from it (left), so the camera's right vector points up a little.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineMovementRollSign, "Runline.Movement.RollSign",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineMovementRollSign::RunTest(const FString&)
+{
+	runline::Controller C(runline::Tuning{}, {0.0f, 1.0f, 0.0f}, 0.0f);   // facing -Z, right is +X
+	C.state = runline::WallRun{{-1.0f, 0.0f, 0.0f}, 0.1f};                  // wall on the right
+	runline::CameraFx Fx;
+	runline::Shot S;
+	for (int32 I = 0; I < 60; ++I) S = Fx.Update(Step, C, runline::Input{});
+	TestTrue(TEXT("camera.rs: negative roll (head tilts left, away from the wall)"), S.view.roll < -0.1f);
+	const FVector Right = FRotationMatrix(RunlineUnits::ToUnrealRotator(S.view.yaw, 0.0f, S.view.roll)).GetScaledAxis(EAxis::Y);
+	TestTrue(TEXT("Unreal: the right side comes up"), Right.Z > 0.05);
 	return true;
 }
 

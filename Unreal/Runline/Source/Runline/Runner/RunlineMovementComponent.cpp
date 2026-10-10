@@ -1,6 +1,7 @@
 #include "RunlineMovementComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/Character.h"
+#include "RunlineSettings.h"
 #include "RunlineUnits.h"
 #include "UnrealWorld.h"
 
@@ -18,6 +19,26 @@ void URunlineMovementComponent::SnapView()
 	PrevEye = V.eye;
 	PrevYaw = V.yaw;
 	PrevPitch = V.pitch;
+	PrevFx = CurFx;
+}
+
+void URunlineMovementComponent::RunEffects(const runline::Input& In)
+{
+	// faith-runner's app: step, then the look limits, then the camera effects (and its rig, the
+	// swan neck).
+	Limiter.Apply(*Controller, StepSeconds);
+	Fx.settings.fovBase = URunlineSettings::Get().FieldOfView;
+	Shot = Fx.Update(StepSeconds, *Controller, In);
+	const auto [Forward, Down] = Swan.Update(*Controller, StepSeconds);
+	const runline::View V = Controller->GetView();
+	PrevFx = CurFx;
+	CurFx.Eye = Shot.view.eye - V.eye;
+	CurFx.Yaw = Shot.view.yaw - V.yaw;
+	CurFx.Pitch = Shot.view.pitch - V.pitch;
+	CurFx.Roll = Shot.view.roll;
+	CurFx.Fov = Shot.view.fovDeg;
+	CurFx.SwanForward = Forward;
+	CurFx.SwanDown = Down;
 }
 
 URunlineMovementComponent::~URunlineMovementComponent() = default;
@@ -97,6 +118,7 @@ void URunlineMovementComponent::StepOnce()
 	try
 	{
 		Controller->Step(StepSeconds, In, CoreWorld());
+		RunEffects(In);
 		// The core respawned her itself (kill plane, lethal fall): cut, don't sweep.
 		for (const runline::Event& E : Controller->events)
 			if (E.kind == runline::EventKind::Death) SnapView();
@@ -147,18 +169,54 @@ void URunlineMovementComponent::SyncCapsule()
 	Velocity = RunlineUnits::ToUnrealVelocity(Controller->vel);
 }
 
-FVector URunlineMovementComponent::GetRenderEye() const
+FVector URunlineMovementComponent::GetRenderBaseEye() const
 {
 	const float Alpha = FMath::Clamp(Accumulator / StepSeconds, 0.0f, 1.0f);
 	const runline::Vec3 Eye = Controller->GetView().eye;
 	return RunlineUnits::ToUnrealPosition(PrevEye * (1.0f - Alpha) + Eye * Alpha);
 }
 
+FVector URunlineMovementComponent::GetRenderEye() const
+{
+	const float Alpha = FMath::Clamp(Accumulator / StepSeconds, 0.0f, 1.0f);
+	const float Motion = URunlineSettings::Get().CameraMotion;
+	const runline::Vec3 Eye = PrevEye * (1.0f - Alpha) + Controller->GetView().eye * Alpha;
+	const runline::Vec3 Bob = (PrevFx.Eye * (1.0f - Alpha) + CurFx.Eye * Alpha) * Motion;
+	// The swan neck: forward and down in the view's yaw frame (TdPawn.CalcCamera).
+	const float Forward = FMath::Lerp(PrevFx.SwanForward, CurFx.SwanForward, Alpha);
+	const float Down = FMath::Lerp(PrevFx.SwanDown, CurFx.SwanDown, Alpha);
+	const float Yaw = FMath::Lerp(PrevYaw, Controller->GetView().yaw, Alpha);
+	const runline::Vec3 Neck = runline::Vec3{-std::sin(Yaw), 0.0f, -std::cos(Yaw)} * Forward - runline::Vec3::UnitY() * Down;
+	return RunlineUnits::ToUnrealPosition(Eye + Bob + Neck);
+}
+
+float URunlineMovementComponent::GetRenderFov() const
+{
+	const float Alpha = FMath::Clamp(Accumulator / StepSeconds, 0.0f, 1.0f);
+	return FMath::Lerp(PrevFx.Fov, CurFx.Fov, Alpha);
+}
+
 FRotator URunlineMovementComponent::GetRenderRotation() const
 {
 	const float Alpha = FMath::Clamp(Accumulator / StepSeconds, 0.0f, 1.0f);
 	const runline::View V = Controller->GetView();
-	const float Yaw = FMath::Lerp(PrevYaw, V.yaw, Alpha) + (Controller->TakesYawLook() ? float(PendingLook.X) : 0.0f);
-	const float Pitch = FMath::Lerp(PrevPitch, V.pitch, Alpha) + (Controller->TakesPitchLook() ? float(PendingLook.Y) : 0.0f);
-	return RunlineUnits::ToUnrealRotator(Yaw, FMath::Clamp(Pitch, -1.5f, 1.5f), V.roll);
+	const float BaseYaw = FMath::Lerp(PrevYaw, V.yaw, Alpha);
+	const float BasePitch = FMath::Lerp(PrevPitch, V.pitch, Alpha);
+	float Yaw = BaseYaw + (Controller->TakesYawLook() ? float(PendingLook.X) : 0.0f);
+	float Pitch = BasePitch + (Controller->TakesPitchLook() ? float(PendingLook.Y) : 0.0f);
+	// The look not stepped yet is drawn at once, but never further past the move's look limit than
+	// the stepped view already is (the LookLimiter would take it back on the next step).
+	const runline::LookLimit Lim = runline::LookLimitFor(*Controller);
+	Pitch = FMath::Clamp(Pitch, FMath::Min(Lim.pitchMin, BasePitch), FMath::Max(Lim.pitchMax, BasePitch));
+	if (Lim.yaw)
+	{
+		const float Base = Limiter.Base(*Controller);
+		Yaw = FMath::Clamp(Yaw, FMath::Min(Base - *Lim.yaw, BaseYaw), FMath::Max(Base + *Lim.yaw, BaseYaw));
+	}
+	// The camera effects, scaled by the player's camera-motion setting.
+	const float Motion = URunlineSettings::Get().CameraMotion;
+	Yaw += FMath::Lerp(PrevFx.Yaw, CurFx.Yaw, Alpha) * Motion;
+	Pitch += FMath::Lerp(PrevFx.Pitch, CurFx.Pitch, Alpha) * Motion;
+	const float Roll = FMath::Lerp(PrevFx.Roll, CurFx.Roll, Alpha) * Motion;
+	return RunlineUnits::ToUnrealRotator(Yaw, Pitch, Roll);
 }

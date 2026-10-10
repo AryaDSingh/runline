@@ -56,6 +56,7 @@ void ARunlineRunner::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	const URunlineMovementComponent& M = Runline();
 	Camera->SetWorldLocationAndRotation(M.GetRenderEye(), M.GetRenderRotation());
+	Camera->SetFieldOfView(M.GetRenderFov());
 	if (AController* C = GetController()) C->SetControlRotation(M.GetRenderRotation());
 	// Checkpoints: faith-runner's app takes a checkpoint further on than the current one.
 	if (Course)

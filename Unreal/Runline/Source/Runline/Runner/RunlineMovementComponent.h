@@ -45,8 +45,15 @@ public:
 	/// Run `DeltaSeconds` of game time: whole steps, the rest carried over to the next frame.
 	void Advance(float DeltaSeconds);
 
-	/// The eye to render this frame (cm): between the last two steps.
+	/// The eye to render this frame (cm): between the last two steps, with the camera effects
+	/// (scaled by the player's camera-motion setting) and the swan neck.
 	FVector GetRenderEye() const;
+	/// The same without the camera effects or swan neck: where the core's eye is, interpolated.
+	FVector GetRenderBaseEye() const;
+	/// Horizontal field of view to render (degrees): CameraFx's, between the last two steps.
+	float GetRenderFov() const;
+	/// The camera effects after the last step (faith-runner's CameraFx shot).
+	const runline::Shot& LastShot() const { return Shot; }
 	/// The view to render this frame: between the last two steps, plus the look not yet stepped
 	/// that the next step will take.
 	FRotator GetRenderRotation() const;
@@ -72,6 +79,8 @@ private:
 	void SyncCapsule();
 	/// Start interpolating from where the core is now (after a respawn or teleport: no sweep).
 	void SnapView();
+	/// The effects that run after each step, as faith-runner's app runs them.
+	void RunEffects(const runline::Input& In);
 	const runline::World& CoreWorld();
 
 	std::unique_ptr<runline::Controller> Controller;
@@ -85,6 +94,20 @@ private:
 	runline::Vec3 PrevEye{};
 	float PrevYaw = 0.0f;
 	float PrevPitch = 0.0f;
+
+	// faith-runner's camera layers (look.rs, camera.rs), stepped with the core. Their output is
+	// kept as offsets from the core's view, so the render view can interpolate them like the eye.
+	runline::LookLimiter Limiter;
+	runline::CameraFx Fx;
+	runline::SwanNeck Swan;
+	runline::Shot Shot;
+	struct FEffects
+	{
+		runline::Vec3 Eye{};
+		float Yaw = 0.0f, Pitch = 0.0f, Roll = 0.0f, Fov = 90.0f;
+		float SwanForward = 0.0f, SwanDown = 0.0f;
+	};
+	FEffects PrevFx, CurFx;
 
 	FVector2D Move = FVector2D::ZeroVector;
 	FVector2D PendingLook = FVector2D::ZeroVector;
