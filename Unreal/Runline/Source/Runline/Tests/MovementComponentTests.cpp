@@ -367,10 +367,16 @@ bool FRunlineMovementMotionZero::RunTest(const FString&)
 		{
 			if (RW.M().GetRenderRotation().Roll != 0.0) { AddError(TEXT("roll at camera motion 0")); break; }
 			if (!RW.M().GetRenderEye().Equals(RW.M().GetRenderBaseEye(), 1e-6)) { AddError(TEXT("bob at camera motion 0")); break; }
+			const FRotator R = RW.M().GetRenderRotation();
+			if (R.Pitch != 0.0 || R.Yaw != 0.0) { AddError(TEXT("shake or kick in yaw/pitch at camera motion 0")); break; }
 		}
 	}
 	TestTrue(TEXT("she's running"), RW.M().LastShot().gait > 0.5f);
 	TestTrue(TEXT("FOV follows the setting (95, plus the sprint add)"), RW.M().GetRenderFov() >= 95.0f && RW.M().GetRenderFov() < 106.0f);
+	// The swan neck stays at motion 0: looking down moves the eye forward and down.
+	RW.M().AddLook(FVector2D(0.0, -1.2));
+	for (int32 F = 0; F < 60; ++F) RW.M().Advance(Step);
+	TestFalse(TEXT("swan neck still there"), RW.M().GetRenderEye().Equals(RW.M().GetRenderBaseEye(), 1.0));
 	return true;
 }
 
@@ -419,6 +425,64 @@ bool FRunlineMovementAnimLabels::RunTest(const FString&)
 	TestFalse(TEXT("landed: not falling"), RW.M().IsFalling());
 	TestTrue(TEXT("standing: no acceleration"), RW.M().GetCurrentAcceleration().IsZero());
 	TestEqual(TEXT("SetMovementMode never ran after BeginPlay"), RW.Runner->ModeChanges, ModesAtStart);
+	return true;
+}
+
+// Review Critical 1: the roll somersault turns the view through a full circle in CameraFx; like
+// faith-runner's app (main.rs: pitch clamped to +-pi/2), the rendered pitch never passes vertical.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineMovementFlipUpright, "Runline.Movement.RollFlipStaysUpright",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineMovementFlipUpright::RunTest(const FString&)
+{
+	FSettingsScope Scope(90.0f, 1.0f);
+	FRunnerWorld RW;
+	RW.M().SpawnAt({0.0f, 6.0f, 0.0f}, 0.0f);   // a 6 m drop: roll it
+	double Worst = 0.0;
+	for (int32 F = 0; F < 144 * 3; ++F)
+	{
+		if (F == 110) { RW.M().PressCrouch(); RW.M().SetCrouchHeld(true); }
+		RW.M().Advance(1.0f / 144.0f);
+		Worst = FMath::Max(Worst, FMath::Abs(RW.M().GetRenderRotation().Pitch));
+	}
+	TestEqual(TEXT("she rolled"), RW.Count(runline::EventKind::Roll), 1);
+	TestTrue(FString::Printf(TEXT("pitch never past vertical (worst %.1f deg)"), Worst), Worst <= 90.0 + 1e-3);
+	return true;
+}
+
+// Review Important 2: look the core has stepped but the LookLimiter pulls back isn't drawn past
+// the limit (no sawtooth when pushing against it).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineMovementSteppedLimit, "Runline.Movement.SteppedLookRespectsLimits",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineMovementSteppedLimit::RunTest(const FString&)
+{
+	FSettingsScope Scope(90.0f, 0.0f);
+	FRunnerWorld RW;
+	RW.M().Advance(10 * Step);
+	const double Limit = FMath::RadiansToDegrees(double(runline::LookLimitFor(RW.M().Core()).pitchMin));
+	double Worst = 0.0;
+	for (int32 F = 0; F < 288; ++F)
+	{
+		RW.M().AddLook(FVector2D(0.0, -0.02));   // keep pushing down
+		RW.M().Advance(1.0f / 144.0f);
+		if (F > 100) Worst = FMath::Min(Worst, RW.M().GetRenderRotation().Pitch - Limit);
+	}
+	TestTrue(FString::Printf(TEXT("never drawn below the limit (worst %.3f deg)"), Worst), Worst >= -1e-3);
+	return true;
+}
+
+// Review Important 5: a manual respawn (R, the menu) starts the camera effects afresh.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineMovementRespawnFx, "Runline.Movement.ManualRespawnResetsEffects",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineMovementRespawnFx::RunTest(const FString&)
+{
+	FSettingsScope Scope(90.0f, 1.0f);
+	FRunnerWorld RW;
+	RW.M().SetMove(FVector2D(0.0, 1.0));
+	for (int32 F = 0; F < 180; ++F) RW.M().Advance(Step);
+	TestTrue(TEXT("bobbing before"), !RW.M().GetRenderEye().Equals(RW.M().GetRenderBaseEye(), 1e-3));
+	RW.M().Respawn();
+	TestTrue(TEXT("no effect offset right after the respawn"), RW.M().GetRenderEye().Equals(RW.M().GetRenderBaseEye(), 1e-4));
+	TestEqual(TEXT("no roll right after the respawn"), RW.M().GetRenderRotation().Roll, 0.0, 1e-6);
 	return true;
 }
 

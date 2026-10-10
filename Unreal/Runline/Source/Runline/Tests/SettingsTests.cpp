@@ -102,4 +102,21 @@ bool FRunlineSettingsSave::RunTest(const FString&)
 	return true;
 }
 
+// Review Important 6: whatever the config loaded into the settings in use, Get() hands back sane
+// values (the load path itself is the engine's).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineSettingsGetSane, "Runline.Settings.GetIsAlwaysSane",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineSettingsGetSane::RunTest(const FString&)
+{
+	URunlineSettings* Cdo = GetMutableDefault<URunlineSettings>();
+	const float Mouse = Cdo->MouseSensitivity, Fov = Cdo->FieldOfView;
+	Cdo->MouseSensitivity = 0.0f;   // as a hand-edited GameUserSettings.ini would load
+	Cdo->FieldOfView = 500.0f;
+	TestEqual(TEXT("mouse"), URunlineSettings::Get().MouseSensitivity, 0.1f);
+	TestEqual(TEXT("FOV"), URunlineSettings::Get().FieldOfView, 120.0f);
+	Cdo->MouseSensitivity = Mouse;
+	Cdo->FieldOfView = Fov;
+	return true;
+}
+
 #endif

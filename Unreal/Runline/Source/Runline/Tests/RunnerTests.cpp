@@ -3,6 +3,8 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "RunlineRunner.h"
 #include "RunlineTestWorld.h"
+#include "RunlineSettings.h"
+#include "RunlineMovementComponent.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -30,6 +32,51 @@ bool FRunlineRunnerArms::RunTest(const FString&)
 	TestTrue(TEXT("arms hang off the body"), Arms->GetAttachParent() == R->GetMesh());
 	TestTrue(TEXT("she doesn't see the body"), R->GetMesh()->bOwnerNoSee);
 	TestTrue(TEXT("only she sees the arms"), Arms->bOnlyOwnerSee);
+	return true;
+}
+
+// Review Important 4: crouched (or sliding) her eye drops; the body, and so the arms, drop with it.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineRunnerBodyTracksEye, "Runline.Runner.BodyTracksTheEye",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineRunnerBodyTracksEye::RunTest(const FString&)
+{
+	FRunlineTestWorld TW;
+	TW.AddBox(runline::Aabb::New({-50.0f, -1.0f, -50.0f}, {50.0f, 0.0f, 50.0f}), 0);
+	ARunlineRunner* R = TW.World->SpawnActor<ARunlineRunner>();
+	R->Runline().SpawnAt({0.0f, 0.0f, 0.0f}, 0.0f);
+	R->Runline().PressCrouch();
+	R->Runline().SetCrouchHeld(true);
+	for (int32 I = 0; I < 60; ++I) R->Runline().Advance(1.0f / 60.0f);
+	R->UpdateBodyPlacement();
+	const runline::Controller& C = R->Runline().Core();
+	TestTrue(TEXT("crouched"), C.crouched);
+	const float Standing = C.tuning.standHeight - C.tuning.eyeFromTop;
+	const float Drop = (C.GetView().eye.y - C.feet.y) - Standing;
+	TestTrue(TEXT("her eye dropped"), Drop < -0.3f);
+	const double WantZ = RunlineUnits::ToUnrealPosition(C.feet).Z + Drop * 100.0;
+	TestEqual(TEXT("the body's root sits that much below her feet"), R->GetMesh()->GetComponentLocation().Z, WantZ, 0.5);
+	return true;
+}
+
+// Review Important 3: the settings are saved when the runner goes away (Quit, map change), not
+// only when the menu closes.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineRunnerSavesOnEnd, "Runline.Runner.SavesSettingsOnEndPlay",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineRunnerSavesOnEnd::RunTest(const FString&)
+{
+	URunlineSettings& S = URunlineSettings::Get();
+	const float Old = S.MouseSensitivity;
+	{
+		FRunlineTestWorld TW;
+		ARunlineRunner* R = TW.World->SpawnActor<ARunlineRunner>();
+		S.MouseSensitivity = 3.25f;
+		R->EndPlay(EEndPlayReason::Quit);   // what quitting does (this bare world never began play, so Destroy wouldn't)
+	}
+	URunlineSettings* Fresh = NewObject<URunlineSettings>();
+	Fresh->LoadConfig();
+	TestEqual(TEXT("saved"), Fresh->MouseSensitivity, 3.25f);
+	S.MouseSensitivity = Old;
+	S.Save();
 	return true;
 }
 

@@ -34,7 +34,10 @@ void URunlineMovementComponent::RunEffects(const runline::Input& In)
 	PrevFx = CurFx;
 	CurFx.Eye = Shot.view.eye - V.eye;
 	CurFx.Yaw = Shot.view.yaw - V.yaw;
-	CurFx.Pitch = Shot.view.pitch - V.pitch;
+	// faith-runner's app clamps the camera's pitch to +-pi/2 (main.rs): the somersault and the
+	// kicks never turn the view past vertical. Clamped here, per step, so the render doesn't
+	// interpolate through a full turn either.
+	CurFx.Pitch = FMath::Clamp(Shot.view.pitch, -UE_HALF_PI, UE_HALF_PI) - V.pitch;
 	CurFx.Roll = Shot.view.roll;
 	CurFx.Fov = Shot.view.fovDeg;
 	CurFx.SwanForward = Forward;
@@ -97,6 +100,16 @@ void URunlineMovementComponent::Respawn()
 {
 	Controller->Respawn();
 	PendingLook = FVector2D::ZeroVector;
+	// A new start: no shake, springs, somersault or swan neck carried over (the core's own death
+	// respawn clears trauma and the flip through its Death event; R and the menu don't send one).
+	runline::CameraFxSettings FxSettings = Fx.settings;
+	FxSettings.fovBase = URunlineSettings::Get().FieldOfView;
+	Fx = runline::CameraFx(FxSettings);
+	Swan = runline::SwanNeck{};
+	Limiter = runline::LookLimiter{};
+	Shot = runline::Shot{};
+	CurFx = FEffects{};
+	CurFx.Fov = FxSettings.fovBase;
 	SnapView();
 	SyncCapsule();
 }
@@ -138,6 +151,15 @@ void URunlineMovementComponent::StepOnce()
 	{
 		Controller->Step(StepSeconds, In, CoreWorld());
 		RunEffects(In);
+		// The look this step took may be one the LookLimiter just pulled back: interpolate from no
+		// further past the limit than she was before the step (no sawtooth against a limit).
+		const runline::LookLimit Lim = runline::LookLimitFor(*Controller);
+		PrevPitch = FMath::Clamp(PrevPitch, FMath::Min(Lim.pitchMin, Before.pitch), FMath::Max(Lim.pitchMax, Before.pitch));
+		if (Lim.yaw)
+		{
+			const float Base = Limiter.Base(*Controller);
+			PrevYaw = FMath::Clamp(PrevYaw, FMath::Min(Base - *Lim.yaw, Before.yaw), FMath::Max(Base + *Lim.yaw, Before.yaw));
+		}
 		// The core respawned her itself (kill plane, lethal fall): cut, don't sweep.
 		for (const runline::Event& E : Controller->events)
 			if (E.kind == runline::EventKind::Death) SnapView();
@@ -241,5 +263,5 @@ FRotator URunlineMovementComponent::GetRenderRotation() const
 	Yaw += FMath::Lerp(PrevFx.Yaw, CurFx.Yaw, Alpha) * Motion;
 	Pitch += FMath::Lerp(PrevFx.Pitch, CurFx.Pitch, Alpha) * Motion;
 	const float Roll = FMath::Lerp(PrevFx.Roll, CurFx.Roll, Alpha) * Motion;
-	return RunlineUnits::ToUnrealRotator(Yaw, Pitch, Roll);
+	return RunlineUnits::ToUnrealRotator(Yaw, FMath::Clamp(Pitch, -UE_HALF_PI, UE_HALF_PI), Roll);
 }

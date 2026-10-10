@@ -10,7 +10,10 @@ namespace
 
 URunlineSettings& URunlineSettings::Get()
 {
-	return *GetMutableDefault<URunlineSettings>();
+	// Sane whatever the config loaded (a hand-edited GameUserSettings.ini included).
+	URunlineSettings& S = *GetMutableDefault<URunlineSettings>();
+	S.Sanitize();
+	return S;
 }
 
 void URunlineSettings::PostInitProperties()

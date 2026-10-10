@@ -24,12 +24,16 @@ public:
 	URunlineMovementComponent& Runline() const;
 
 	virtual void BeginPlay() override;
+	/// Saves the settings and closes the menu (Quit, map change, the runner destroyed).
+	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 	virtual void PawnClientRestart() override;
 
 	/// Opens the pause menu (pauses, shows the cursor) or closes it (saves the settings, resumes).
 	void ToggleMenu();
+	/// Turns the body with the view and stands it where her eye is (called each tick).
+	void UpdateBodyPlacement();
 	bool IsMenuOpen() const { return Menu.IsValid(); }
 
 private:

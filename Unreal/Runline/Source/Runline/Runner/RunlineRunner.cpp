@@ -87,9 +87,7 @@ void ARunlineRunner::Tick(float DeltaSeconds)
 	const URunlineMovementComponent& M = Runline();
 	Camera->SetWorldLocationAndRotation(M.GetRenderEye(), M.GetRenderRotation());
 	Camera->SetFieldOfView(M.GetRenderFov());
-	// The body turns with the view (her yaw) and stands on her feet, whatever the capsule's height.
-	SetActorRotation(FRotator(0.0, M.GetRenderRotation().Yaw, 0.0));
-	GetMesh()->SetRelativeLocation(FVector(0.0, 0.0, -GetCapsuleComponent()->GetScaledCapsuleHalfHeight()));
+	UpdateBodyPlacement();
 	if (AController* C = GetController()) C->SetControlRotation(M.GetRenderRotation());
 	// Checkpoints: faith-runner's app takes a checkpoint further on than the current one.
 	if (Course)
@@ -103,6 +101,29 @@ void ARunlineRunner::Tick(float DeltaSeconds)
 			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::White, FString::Printf(TEXT("CHECKPOINT - %s"), *Cp.Name));
 		}
 	}
+}
+
+void ARunlineRunner::UpdateBodyPlacement()
+{
+	// The body turns with the view (her yaw) and stands on her feet, whatever the capsule's height.
+	SetActorRotation(FRotator(0.0, Runline().GetRenderRotation().Yaw, 0.0));
+	// Her eye drops when she crouches or slides; the body (a standing Manny) drops with it, so the
+	// arms stay at the eye.
+	const runline::Controller& C = Runline().Core();
+	const float EyeDrop = (C.GetView().eye.y - C.feet.y) - (C.tuning.standHeight - C.tuning.eyeFromTop);
+	GetMesh()->SetRelativeLocation(FVector(0.0, 0.0, -GetCapsuleComponent()->GetScaledCapsuleHalfHeight() + EyeDrop * 100.0));
+}
+
+void ARunlineRunner::EndPlay(const EEndPlayReason::Type Reason)
+{
+	if (Menu.IsValid()) ToggleMenu();   // unpauses and removes the widget (and saves)
+	if (Menu.IsValid() && GEngine && GEngine->GameViewport)
+	{
+		GEngine->GameViewport->RemoveViewportWidgetContent(Menu.ToSharedRef());   // no controller left to close it
+		Menu.Reset();
+	}
+	URunlineSettings::Get().Save();
+	Super::EndPlay(Reason);
 }
 
 void ARunlineRunner::BuildInput()
