@@ -12,6 +12,7 @@
 #include "RunlineCourse.h"
 #include "RunlineMovementComponent.h"
 #include "RunlineRunGameMode.h"
+#include "RunlineSettings.h"
 
 ARunlineRunner::ARunlineRunner(const FObjectInitializer& OI)
 	: Super(OI.SetDefaultSubobjectClass<URunlineMovementComponent>(ACharacter::CharacterMovementComponentName))
@@ -76,6 +77,9 @@ void ARunlineRunner::BuildInput()
 		return A;
 	};
 	MoveAction = Make(TEXT("Move"), EInputActionValueType::Axis2D);
+	// W+S cancel, A+D cancel (faith-runner sums the keys); the default keeps the strongest key.
+	MoveAction->AccumulationBehavior = EInputActionAccumulationBehavior::Cumulative;
+	PadMoveAction = Make(TEXT("PadMove"), EInputActionValueType::Axis2D);
 	MouseLookAction = Make(TEXT("MouseLook"), EInputActionValueType::Axis2D);
 	PadLookAction = Make(TEXT("PadLook"), EInputActionValueType::Axis2D);
 	JumpAction = Make(TEXT("Jump"), EInputActionValueType::Boolean);
@@ -93,9 +97,10 @@ void ARunlineRunner::BuildInput()
 	S.Modifiers.Add(Negate());
 	Mapping->MapKey(MoveAction, EKeys::D);
 	Mapping->MapKey(MoveAction, EKeys::A).Modifiers.Add(Negate());
-	Mapping->MapKey(MoveAction, EKeys::Gamepad_Left2D).Modifiers.Add(NewObject<UInputModifierDeadZone>(this));
+	// Sticks: raw values; faith-runner's dead zones and response are in URunlineSettings.
+	Mapping->MapKey(PadMoveAction, EKeys::Gamepad_Left2D);
 	Mapping->MapKey(MouseLookAction, EKeys::Mouse2D);
-	Mapping->MapKey(PadLookAction, EKeys::Gamepad_Right2D).Modifiers.Add(NewObject<UInputModifierDeadZone>(this));
+	Mapping->MapKey(PadLookAction, EKeys::Gamepad_Right2D);
 	for (const FKey& K : {EKeys::SpaceBar, EKeys::Gamepad_FaceButton_Bottom, EKeys::Gamepad_LeftShoulder}) Mapping->MapKey(JumpAction, K);
 	for (const FKey& K : {EKeys::LeftShift, EKeys::C, EKeys::LeftControl, EKeys::Gamepad_FaceButton_Right, EKeys::Gamepad_LeftTrigger}) Mapping->MapKey(CrouchAction, K);
 	for (const FKey& K : {EKeys::Q, EKeys::Gamepad_FaceButton_Top}) Mapping->MapKey(TurnAction, K);
@@ -118,6 +123,8 @@ void ARunlineRunner::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 	UEnhancedInputComponent* In = CastChecked<UEnhancedInputComponent>(PlayerInputComponent);
 	In->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ARunlineRunner::OnMove);
 	In->BindAction(MoveAction, ETriggerEvent::Completed, this, &ARunlineRunner::OnMoveStop);
+	In->BindAction(PadMoveAction, ETriggerEvent::Triggered, this, &ARunlineRunner::OnPadMove);
+	In->BindAction(PadMoveAction, ETriggerEvent::Completed, this, &ARunlineRunner::OnPadMoveStop);
 	In->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &ARunlineRunner::OnMouseLook);
 	In->BindAction(PadLookAction, ETriggerEvent::Triggered, this, &ARunlineRunner::OnPadLook);
 	In->BindAction(JumpAction, ETriggerEvent::Started, this, &ARunlineRunner::OnJump);
@@ -128,19 +135,13 @@ void ARunlineRunner::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 	In->BindAction(RespawnAction, ETriggerEvent::Started, this, &ARunlineRunner::OnRespawn);
 }
 
-void ARunlineRunner::OnMove(const FInputActionValue& V) { Runline().SetMove(V.Get<FVector2D>()); }
-void ARunlineRunner::OnMoveStop(const FInputActionValue&) { Runline().SetMove(FVector2D::ZeroVector); }
-// faith-runner: look = (-dx, dy) * sensitivity; Unreal's mouse and stick Y are already "up is positive".
-void ARunlineRunner::OnMouseLook(const FInputActionValue& V)
-{
-	const FVector2D D = V.Get<FVector2D>();
-	Runline().AddLook(FVector2D(-D.X, D.Y) * MouseRadiansPerCount);
-}
-void ARunlineRunner::OnPadLook(const FInputActionValue& V)
-{
-	const FVector2D D = V.Get<FVector2D>();
-	Runline().AddLook(FVector2D(-D.X, D.Y) * PadRadiansPerSecond * GetWorld()->GetDeltaSeconds());
-}
+void ARunlineRunner::OnMove(const FInputActionValue& V) { KeyMove = V.Get<FVector2D>(); PushMove(); }
+void ARunlineRunner::OnMoveStop(const FInputActionValue&) { KeyMove = FVector2D::ZeroVector; PushMove(); }
+void ARunlineRunner::OnPadMove(const FInputActionValue& V) { PadMove = URunlineSettings::PadMove(V.Get<FVector2D>()); PushMove(); }
+void ARunlineRunner::OnPadMoveStop(const FInputActionValue&) { PadMove = FVector2D::ZeroVector; PushMove(); }
+void ARunlineRunner::PushMove() { Runline().SetMove(KeyMove + PadMove); }
+void ARunlineRunner::OnMouseLook(const FInputActionValue& V) { Runline().AddLook(URunlineSettings::Get().MouseLook(V.Get<FVector2D>())); }
+void ARunlineRunner::OnPadLook(const FInputActionValue& V) { Runline().AddLook(URunlineSettings::Get().PadLook(V.Get<FVector2D>(), GetWorld()->GetDeltaSeconds())); }
 void ARunlineRunner::OnJump(const FInputActionValue&) { Runline().PressJump(); Runline().SetJumpHeld(true); }
 void ARunlineRunner::OnJumpStop(const FInputActionValue&) { Runline().SetJumpHeld(false); }
 void ARunlineRunner::OnCrouch(const FInputActionValue&) { Runline().PressCrouch(); Runline().SetCrouchHeld(true); }

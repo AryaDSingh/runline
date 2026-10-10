@@ -23,13 +23,6 @@ public:
 
 	URunlineMovementComponent& Runline() const;
 
-	/// Mouse look: radians per mouse count (faith-runner: 0.0022).
-	UPROPERTY(EditAnywhere, Category = "Runline|Input")
-	float MouseRadiansPerCount = 0.0022f;
-	/// Stick look: radians per second at full deflection (faith-runner: 3.2).
-	UPROPERTY(EditAnywhere, Category = "Runline|Input")
-	float PadRadiansPerSecond = 3.2f;
-
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
@@ -39,6 +32,9 @@ private:
 	void BuildInput();
 	void OnMove(const FInputActionValue& V);
 	void OnMoveStop(const FInputActionValue& V);
+	void OnPadMove(const FInputActionValue& V);
+	void OnPadMoveStop(const FInputActionValue& V);
+	void PushMove();
 	void OnMouseLook(const FInputActionValue& V);
 	void OnPadLook(const FInputActionValue& V);
 	void OnJump(const FInputActionValue& V);
@@ -52,6 +48,7 @@ private:
 	TObjectPtr<UCameraComponent> Camera;
 	UPROPERTY() TObjectPtr<UInputMappingContext> Mapping;
 	UPROPERTY() TObjectPtr<UInputAction> MoveAction;
+	UPROPERTY() TObjectPtr<UInputAction> PadMoveAction;
 	UPROPERTY() TObjectPtr<UInputAction> MouseLookAction;
 	UPROPERTY() TObjectPtr<UInputAction> PadLookAction;
 	UPROPERTY() TObjectPtr<UInputAction> JumpAction;
@@ -60,4 +57,7 @@ private:
 	UPROPERTY() TObjectPtr<UInputAction> RespawnAction;
 	UPROPERTY() TObjectPtr<ARunlineCourse> Course;
 	int32 Checkpoint = 0;
+	// Keys and stick, summed as faith-runner does (the core clamps the length).
+	FVector2D KeyMove = FVector2D::ZeroVector;
+	FVector2D PadMove = FVector2D::ZeroVector;
 };
