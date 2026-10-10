@@ -6,7 +6,7 @@
 #include "RunlineTestRunner.generated.h"
 
 UCLASS(NotBlueprintable, HideDropdown)
-class ARunlineTestRunner : public ACharacter
+class RUNLINE_API ARunlineTestRunner : public ACharacter
 {
 	GENERATED_BODY()
 public:

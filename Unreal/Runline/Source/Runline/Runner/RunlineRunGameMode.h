@@ -11,7 +11,7 @@
 /// (with ?shot, to check the menu's look). `?autorun=1` holds forward from the start (screenshots of
 /// the run: bob, FOV, tilt).
 UCLASS()
-class ARunlineRunGameMode : public AGameModeBase
+class RUNLINE_API ARunlineRunGameMode : public AGameModeBase
 {
 	GENERATED_BODY()
 

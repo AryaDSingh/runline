@@ -16,7 +16,7 @@ enum class ERunlineLook : uint8 { Roof, Wall, Runner, Prop, Finish, Skyline };
 /// its level order, which breaks exact ties as faith-runner's list order does); the cube follows it
 /// (OnConstruction), so moving or resizing the box in the editor changes both.
 UCLASS()
-class ARunlineBox : public AActor
+class RUNLINE_API ARunlineBox : public AActor
 {
 	GENERATED_BODY()
 
@@ -43,7 +43,7 @@ public:
 
 /// A checkpoint: walking into Region makes the spawn point (with its yaw) the respawn point.
 UCLASS()
-class ARunlineCheckpoint : public AActor
+class RUNLINE_API ARunlineCheckpoint : public AActor
 {
 	GENERATED_BODY()
 
@@ -67,7 +67,7 @@ public:
 
 /// The finish: reaching its region stops the time trial.
 UCLASS()
-class ARunlineFinish : public AActor
+class RUNLINE_API ARunlineFinish : public AActor
 {
 	GENERATED_BODY()
 
@@ -80,13 +80,13 @@ public:
 namespace RunlineCourses
 {
 	/// Spawns a course's actors into World (and a sun, sky light and atmosphere if bLights).
-	void Spawn(UWorld* World, const FRunlineCourseData& Data, bool bLights);
+	RUNLINE_API void Spawn(UWorld* World, const FRunlineCourseData& Data, bool bLights);
 	/// The world's checkpoints, sorted by Index.
-	TArray<ARunlineCheckpoint*> Checkpoints(const UWorld* World);
+	RUNLINE_API TArray<ARunlineCheckpoint*> Checkpoints(const UWorld* World);
 	/// The world's finish, if it has one.
-	ARunlineFinish* Finish(const UWorld* World);
+	RUNLINE_API ARunlineFinish* Finish(const UWorld* World);
 	/// The first checkpoint whose region contains Feet (faith-runner's checkpoint_at), or INDEX_NONE.
-	int32 CheckpointAt(const TArray<ARunlineCheckpoint*>& Checkpoints, runline::Vec3 Feet);
+	RUNLINE_API int32 CheckpointAt(const TArray<ARunlineCheckpoint*>& Checkpoints, runline::Vec3 Feet);
 	/// Whether a core point is inside a core region (faith-runner's `inside`, faces included).
-	bool Inside(const runline::Aabb& Region, runline::Vec3 P);
+	RUNLINE_API bool Inside(const runline::Aabb& Region, runline::Vec3 P);
 }

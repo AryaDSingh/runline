@@ -10,6 +10,9 @@ Spec: docs/superpowers/specs/2026-10-09-faith-movement-port-design.md
   the log is build/unreal-tests.log.
 - `scripts/build-core-ue.ps1`: RunlineCore as a Release static library for Unreal (build/RunlineCore-ue); UBT
   runs it as a pre-build step, so it rarely needs running by hand.
+- `powershell -ExecutionPolicy Bypass -File scripts/bake-courses.ps1`: bakes Data/Levels/{rooftops,greybox}.csv into
+  /Game/Runline/Maps/{Rooftops,Greybox} (the RunlineBakeCourse commandlet, RunlineEditor module). Re-baking replaces
+  hand edits in those maps; commit the .umaps (LFS).
 - Play a course (rooftops or greybox) on an empty map; add `?shot=20` to screenshot after 20 s and quit
   (the game window takes keyboard focus, so type nothing meanwhile):
   `& 'D:\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe' "$PWD\Unreal\Runline\Runline.uproject" '/Engine/Maps/Entry?game=/Script/Runline.RunlineRunGameMode?course=rooftops' -game -windowed -ResX=1600 -ResY=900`

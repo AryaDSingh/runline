@@ -74,6 +74,7 @@ bool FRunlineCourseLoads::RunTest(const FString&)
 	return true;
 }
 
+#if WITH_EDITOR   // editing actors (RerunConstructionScripts) is editor-only
 // Review Focus 1: a designer moves or resizes a box in the editor; the mesh follows, and the core
 // collides with the new box.
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineCourseBoxEdit, "Runline.Course.BoxMeshFollowsCollider",
@@ -95,6 +96,8 @@ bool FRunlineCourseBoxEdit::RunTest(const FString&)
 	TestFalse(TEXT("and not the old one"), W.Overlaps(runline::Aabb::New({-0.5f, 0.2f, -0.5f}, {0.5f, 0.8f, 0.5f})));
 	return true;
 }
+
+#endif
 
 // Review Focus 2: a map with no checkpoints (the empty map) gets the CSV course; a map with its
 // own course gets nothing extra.

@@ -4,7 +4,7 @@
 
 /// A faith-runner course from Data/Levels/<name>.csv (exported by tools/golden from faith-runner's
 /// greybox.rs and rooftops.rs), parsed. Core metres, Y up.
-struct FRunlineCourseData
+struct RUNLINE_API FRunlineCourseData
 {
 	struct FBoxEntry
 	{

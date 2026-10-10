@@ -14,7 +14,7 @@
 /// reaches the next one, once); look is fed to the first step of a frame and also shown at once,
 /// so it never lags. The capsule sits at the real stepped feet; only the view is interpolated.
 UCLASS(ClassGroup = Runline)
-class URunlineMovementComponent : public UCharacterMovementComponent
+class RUNLINE_API URunlineMovementComponent : public UCharacterMovementComponent
 {
 	GENERATED_BODY()
 

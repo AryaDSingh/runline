@@ -11,3 +11,4 @@ Unreal/Runline/DerivedDataCache/
 Unreal/Runline/.vs/
 *.sln
 *.slnx
+Unreal/Runline/Content/Runline/Maps/Test_*

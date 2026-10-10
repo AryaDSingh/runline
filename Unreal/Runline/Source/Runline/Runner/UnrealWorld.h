@@ -13,7 +13,7 @@ class UWorld;
 /// it (the narrowphase), so results are bit-identical to a BoxWorld of the same boxes. Only
 /// axis-aligned UBoxComponents count (M2a); any other blocking primitive in range is ignored with
 /// a one-time warning.
-class FUnrealWorld final : public runline::World
+class RUNLINE_API FUnrealWorld final : public runline::World
 {
 public:
 	/// `Ignore` (usually the runner) is never seen.
