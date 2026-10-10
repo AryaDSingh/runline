@@ -14,7 +14,7 @@ Spec: docs/superpowers/specs/2026-10-09-faith-movement-port-design.md
   (the game window takes keyboard focus, so type nothing meanwhile):
   `& 'D:\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe' "$PWD\Unreal\Runline\Runline.uproject" '/Engine/Maps/Entry?game=/Script/Runline.RunlineRunGameMode?course=rooftops' -game -windowed -ResX=1600 -ResY=900`
 - Golden data: `cargo run --release` in tools/golden (needs the reference clone at
-  ../faith-runner). It rewrites RunlineCore/tests/golden/*.csv and REFERENCE (the faith-runner
+  ../faith-runner). It rewrites RunlineCore/tests/golden/*.csv, Unreal/Runline/Data/Levels/*.csv and REFERENCE (the faith-runner
   commit used; currently 9470d755). Regenerate only from a clean checkout, and commit all three.
 - Controller traces: `bash tools/trace/make-traces.sh` (Git Bash) applies tools/trace/faith-runner-trace.patch
   to a separate worktree ../faith-runner-trace (the reference clone stays clean), runs faith_move's
