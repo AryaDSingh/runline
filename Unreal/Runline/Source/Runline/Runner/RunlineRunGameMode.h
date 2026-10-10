@@ -29,5 +29,7 @@ private:
 	float ShotAfter = 0.0f;
 	bool bMenuAtStart = false;
 	bool bAutorun = false;
+	/// ?pitch=<degrees>: look up (+) or down (-) at the start (screenshots of the arms and body).
+	float StartPitchDeg = 0.0f;
 	UPROPERTY() TObjectPtr<ARunlineCourse> Course;
 };

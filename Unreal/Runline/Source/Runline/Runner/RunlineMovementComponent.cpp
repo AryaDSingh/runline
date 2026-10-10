@@ -46,8 +46,26 @@ URunlineMovementComponent::~URunlineMovementComponent() = default;
 void URunlineMovementComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	SetMovementMode(MOVE_Custom);
+	UpdateAnimLabels();
 	SyncCapsule();
+}
+
+void URunlineMovementComponent::SetDefaultMovementMode()
+{
+	UpdateAnimLabels();
+}
+
+void URunlineMovementComponent::UpdateAnimLabels()
+{
+	const runline::State& S = Controller->state;
+	const bool bFalling = std::holds_alternative<runline::Air>(S) || std::holds_alternative<runline::WallRun>(S)
+		|| std::holds_alternative<runline::WallClimb>(S) || std::holds_alternative<runline::WallClimbTurned>(S)
+		|| std::holds_alternative<runline::Vault>(S);
+	MovementMode = bFalling ? MOVE_Falling : MOVE_Walking;
+	Velocity = RunlineUnits::ToUnrealVelocity(Controller->vel);
+	const float Yaw = Controller->yaw;
+	const runline::Vec3 Wish = runline::Vec3{-std::sin(Yaw), 0.0f, -std::cos(Yaw)} * LastMoveAxis.y + runline::Vec3{std::cos(Yaw), 0.0f, -std::sin(Yaw)} * LastMoveAxis.x;
+	Acceleration = bFalling ? FVector::ZeroVector : RunlineUnits::ToUnrealDirection(Wish) * GetMaxAcceleration();
 }
 
 void URunlineMovementComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -111,6 +129,7 @@ runline::Input URunlineMovementComponent::TakeInput()
 void URunlineMovementComponent::StepOnce()
 {
 	const runline::Input In = TakeInput();
+	LastMoveAxis = In.moveAxis;
 	const runline::View Before = Controller->GetView();
 	PrevEye = Before.eye;
 	PrevYaw = Before.yaw + (Controller->TakesYawLook() ? In.look.x : 0.0f);
@@ -153,7 +172,11 @@ void URunlineMovementComponent::Advance(float DeltaSeconds)
 		StepOnce();
 		Accumulator -= StepSeconds;
 	}
-	if (N > 0) SyncCapsule();
+	if (N > 0)
+	{
+		SyncCapsule();
+		UpdateAnimLabels();
+	}
 }
 
 void URunlineMovementComponent::SyncCapsule()

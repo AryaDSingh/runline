@@ -14,4 +14,12 @@ public:
 		: Super(OI.SetDefaultSubobjectClass<URunlineMovementComponent>(ACharacter::CharacterMovementComponentName)) {}
 
 	URunlineMovementComponent& Runline() const { return *CastChecked<URunlineMovementComponent>(GetCharacterMovement()); }
+
+	/// How many times CMC's SetMovementMode has run (it fires OnMovementModeChanged).
+	int32 ModeChanges = 0;
+	virtual void OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode = 0) override
+	{
+		Super::OnMovementModeChanged(PrevMovementMode, PreviousCustomMode);
+		++ModeChanges;
+	}
 };

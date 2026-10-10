@@ -71,12 +71,18 @@ public:
 	TFunction<void(const runline::Controller&, const runline::Input&)> OnStep;
 
 	virtual void BeginPlay() override;
+	/// CMC calls this on possession and restart; set the label directly (see UpdateAnimLabels).
+	virtual void SetDefaultMovementMode() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 private:
 	runline::Input TakeInput();
 	void StepOnce();
 	void SyncCapsule();
+	/// What the template's anim BP reads (Velocity, Acceleration, IsFalling), from the core's state.
+	/// MovementMode is assigned directly, never through SetMovementMode: its Walking mode runs
+	/// CMC's floor adjustment, which can move the capsule.
+	void UpdateAnimLabels();
 	/// Start interpolating from where the core is now (after a respawn or teleport: no sweep).
 	void SnapView();
 	/// The effects that run after each step, as faith-runner's app runs them.
@@ -110,6 +116,8 @@ private:
 	FEffects PrevFx, CurFx;
 
 	FVector2D Move = FVector2D::ZeroVector;
+	/// The move the last step took (for the anim BP's acceleration).
+	runline::Vec2 LastMoveAxis{};
 	FVector2D PendingLook = FVector2D::ZeroVector;
 	bool bJumpLatched = false;
 	bool bJumpHeld = false;

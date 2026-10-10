@@ -23,6 +23,7 @@ void ARunlineRunGameMode::InitGame(const FString& MapName, const FString& Option
 	ShotAfter = UGameplayStatics::GetIntOption(Options, TEXT("shot"), 0);
 	bMenuAtStart = UGameplayStatics::GetIntOption(Options, TEXT("menu"), 0) != 0;
 	bAutorun = UGameplayStatics::GetIntOption(Options, TEXT("autorun"), 0) != 0;
+	StartPitchDeg = float(UGameplayStatics::GetIntOption(Options, TEXT("pitch"), 0));
 }
 
 void ARunlineRunGameMode::StartPlay()
@@ -35,6 +36,14 @@ void ARunlineRunGameMode::StartPlay()
 		{
 			if (ARunlineRunner* R = Cast<ARunlineRunner>(UGameplayStatics::GetPlayerPawn(this, 0))) R->ToggleMenu();
 		}, 1.0f, false);
+	}
+	if (StartPitchDeg != 0.0f)
+	{
+		FTimerHandle Look;
+		GetWorldTimerManager().SetTimer(Look, [this]
+		{
+			if (ARunlineRunner* R = Cast<ARunlineRunner>(UGameplayStatics::GetPlayerPawn(this, 0))) R->Runline().AddLook(FVector2D(0.0, FMath::DegreesToRadians(StartPitchDeg)));
+		}, 0.5f, false);
 	}
 	if (bAutorun)
 	{

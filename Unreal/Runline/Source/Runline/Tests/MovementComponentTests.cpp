@@ -391,4 +391,35 @@ bool FRunlineMovementRollSign::RunTest(const FString&)
 	return true;
 }
 
+// The template's anim BP reads CMC's velocity, acceleration and IsFalling(); the component keeps
+// them in step with the core, by direct assignment, never SetMovementMode (whose Walking mode runs
+// CMC's floor adjustment and can move the capsule).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineMovementAnimLabels, "Runline.Movement.AnimLabels",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineMovementAnimLabels::RunTest(const FString&)
+{
+	FRunnerWorld RW;
+	const int32 ModesAtStart = RW.Runner->ModeChanges;
+	RW.M().SetMove(FVector2D(0.0, 1.0));
+	for (int32 I = 0; I < 60; ++I) RW.M().Advance(Step);   // one step a frame (one long Advance is a hitch, capped)
+	TestFalse(TEXT("running: not falling"), RW.M().IsFalling());
+	TestTrue(TEXT("running: on the ground"), RW.M().IsMovingOnGround());
+	TestTrue(TEXT("running: accelerating"), RW.M().GetCurrentAcceleration().Size() > 0.0);
+	TestTrue(TEXT("running: velocity"), RW.M().Velocity.Size() > 100.0);
+	RW.M().PressJump();
+	bool bFell = false;
+	for (int32 I = 0; I < 10; ++I)
+	{
+		RW.M().Advance(Step);
+		bFell |= RW.M().IsFalling();
+	}
+	TestTrue(TEXT("jumping: falling"), bFell);
+	RW.M().SetMove(FVector2D::ZeroVector);
+	for (int32 I = 0; I < 120; ++I) RW.M().Advance(Step);
+	TestFalse(TEXT("landed: not falling"), RW.M().IsFalling());
+	TestTrue(TEXT("standing: no acceleration"), RW.M().GetCurrentAcceleration().IsZero());
+	TestEqual(TEXT("SetMovementMode never ran after BeginPlay"), RW.Runner->ModeChanges, ModesAtStart);
+	return true;
+}
+
 #endif

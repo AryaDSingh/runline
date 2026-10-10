@@ -51,6 +51,10 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Runline")
 	TObjectPtr<UCameraComponent> Camera;
+	/// The template's first-person arms: they copy the (hidden) body's pose (ABP_FP_Copy's Copy Pose
+	/// From Mesh uses the attached parent), so they hang off the body, which turns with the view.
+	UPROPERTY(VisibleAnywhere, Category = "Runline")
+	TObjectPtr<class USkeletalMeshComponent> FirstPersonMesh;
 	UPROPERTY() TObjectPtr<UInputMappingContext> Mapping;
 	UPROPERTY() TObjectPtr<UInputAction> MoveAction;
 	UPROPERTY() TObjectPtr<UInputAction> PadMoveAction;

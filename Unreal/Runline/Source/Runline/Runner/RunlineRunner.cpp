@@ -1,5 +1,9 @@
 #include "RunlineRunner.h"
 #include "Camera/CameraComponent.h"
+#include "Animation/AnimInstance.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
+#include "UObject/ConstructorHelpers.h"
 #include "Components/CapsuleComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
@@ -31,6 +35,32 @@ ARunlineRunner::ARunlineRunner(const FObjectInitializer& OI)
 	Camera->SetUsingAbsoluteLocation(true);
 	Camera->SetUsingAbsoluteRotation(true);
 	Camera->SetFieldOfView(90.0f);
+	// The template's first-person rendering: the arms draw at their own FOV and scale, so they don't
+	// stretch at wide FOVs or clip into walls (RunlineCharacter.cpp's values).
+	Camera->bEnableFirstPersonFieldOfView = true;
+	Camera->FirstPersonFieldOfView = 70.0f;
+	Camera->bEnableFirstPersonScale = true;
+	Camera->FirstPersonScale = 0.6f;
+
+	// The template's Manny: the body (seen by others and in shadows, not by her) runs ABP_Unarmed,
+	// which reads the movement component's velocity, acceleration and IsFalling (kept in step with
+	// the core); the arms copy its pose.
+	static ConstructorHelpers::FObjectFinder<USkeletalMesh> Manny(TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple"));
+	static ConstructorHelpers::FClassFinder<UAnimInstance> BodyAnim(TEXT("/Game/Characters/Mannequins/Anims/Unarmed/ABP_Unarmed"));
+	static ConstructorHelpers::FClassFinder<UAnimInstance> ArmsAnim(TEXT("/Game/FirstPerson/Anims/ABP_FP_Copy"));
+	USkeletalMeshComponent* Body = GetMesh();
+	Body->SetSkeletalMesh(Manny.Object);
+	Body->SetAnimInstanceClass(BodyAnim.Class);
+	Body->SetOwnerNoSee(true);
+	Body->FirstPersonPrimitiveType = EFirstPersonPrimitiveType::WorldSpaceRepresentation;
+	Body->SetRelativeLocationAndRotation(FVector(0.0, 0.0, -90.0), FRotator(0.0, -90.0, 0.0));   // Manny faces +Y
+	FirstPersonMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirstPersonMesh"));
+	FirstPersonMesh->SetupAttachment(Body);
+	FirstPersonMesh->SetSkeletalMesh(Manny.Object);
+	FirstPersonMesh->SetAnimInstanceClass(ArmsAnim.Class);
+	FirstPersonMesh->SetOnlyOwnerSee(true);
+	FirstPersonMesh->FirstPersonPrimitiveType = EFirstPersonPrimitiveType::FirstPerson;
+	FirstPersonMesh->SetCollisionProfileName(FName("NoCollision"));
 }
 
 URunlineMovementComponent& ARunlineRunner::Runline() const
@@ -57,6 +87,9 @@ void ARunlineRunner::Tick(float DeltaSeconds)
 	const URunlineMovementComponent& M = Runline();
 	Camera->SetWorldLocationAndRotation(M.GetRenderEye(), M.GetRenderRotation());
 	Camera->SetFieldOfView(M.GetRenderFov());
+	// The body turns with the view (her yaw) and stands on her feet, whatever the capsule's height.
+	SetActorRotation(FRotator(0.0, M.GetRenderRotation().Yaw, 0.0));
+	GetMesh()->SetRelativeLocation(FVector(0.0, 0.0, -GetCapsuleComponent()->GetScaledCapsuleHalfHeight()));
 	if (AController* C = GetController()) C->SetControlRotation(M.GetRenderRotation());
 	// Checkpoints: faith-runner's app takes a checkpoint further on than the current one.
 	if (Course)
