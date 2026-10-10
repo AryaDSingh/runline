@@ -107,4 +107,15 @@ bool FRunlineRunnerArmsSmooth::RunTest(const FString&)
 	return true;
 }
 
+// Runline plays 25% faster than Mirror's Edge (user's call, 2026-10-10): the runner sets it.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineRunnerGameSpeed, "Runline.Runner.PlaysAtRunlineSpeed",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineRunnerGameSpeed::RunTest(const FString&)
+{
+	FRunlineTestWorld TW;
+	ARunlineRunner* R = TW.World->SpawnActor<ARunlineRunner>();
+	TestEqual(TEXT("game speed"), R->Runline().GameSpeed, 1.25f);
+	return true;
+}
+
 #endif

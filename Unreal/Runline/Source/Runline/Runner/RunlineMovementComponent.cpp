@@ -182,7 +182,7 @@ void URunlineMovementComponent::StepOnce()
 
 void URunlineMovementComponent::Advance(float DeltaSeconds)
 {
-	Accumulator += DeltaSeconds;
+	Accumulator += DeltaSeconds * GameSpeed;
 	int32 N = FMath::FloorToInt(Accumulator / StepSeconds);
 	if (N > MaxStepsPerFrame)
 	{

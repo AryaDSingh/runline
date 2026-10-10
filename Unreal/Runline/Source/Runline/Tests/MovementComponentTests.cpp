@@ -486,4 +486,19 @@ bool FRunlineMovementRespawnFx::RunTest(const FString&)
 	return true;
 }
 
+// Game speed: game time runs faster than real time; the core still steps at faith-runner's 1/60 s
+// (bit-exact), there are just more steps per real second. Look stays real-time.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineMovementGameSpeed, "Runline.Movement.GameSpeed",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineMovementGameSpeed::RunTest(const FString&)
+{
+	FRunnerWorld RW;
+	TestEqual(TEXT("the component's own default is faith-runner's speed"), RW.M().GameSpeed, 1.0f);
+	RW.M().GameSpeed = 1.25f;
+	for (int32 F = 0; F < 60; ++F) RW.M().Advance(1.0f / 60.0f);   // one real second
+	TestTrue(FString::Printf(TEXT("75 steps in a real second (%lld)"), RW.M().StepCount()), FMath::Abs(RW.M().StepCount() - 75) <= 1);
+	TestTrue(TEXT("each step is still 1/60 s of core time"), RW.Inputs.size() == size_t(RW.M().StepCount()));
+	return true;
+}
+
 #endif

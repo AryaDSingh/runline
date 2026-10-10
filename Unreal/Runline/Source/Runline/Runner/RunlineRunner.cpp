@@ -29,6 +29,9 @@ ARunlineRunner::ARunlineRunner(const FObjectInitializer& OI)
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickGroup = TG_PostPhysics;
 	bUseControllerRotationYaw = false;
+	// Runline plays 25% faster than Mirror's Edge (the user's call after the M2 playtest): the whole
+	// simulation, so every gap and wall on faith-runner's courses still works.
+	Runline().GameSpeed = 1.25f;
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(GetCapsuleComponent());
 	Camera->bUsePawnControlRotation = false;

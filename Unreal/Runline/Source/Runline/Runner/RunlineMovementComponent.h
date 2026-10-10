@@ -26,6 +26,11 @@ public:
 	/// After a hitch, at most this many steps run in one frame; the rest of the time is dropped.
 	static constexpr int32 MaxStepsPerFrame = 5;
 
+	/// Game seconds per real second. The core still steps 1/60 s of game time (bit-exact with
+	/// faith-runner); a higher speed just runs more steps a second. Look stays real-time.
+	UPROPERTY(EditAnywhere, Category = "Runline", meta = (ClampMin = "0.25", ClampMax = "3.0"))
+	float GameSpeed = 1.0f;
+
 	/// Put the runner at a core spawn point (also its respawn point).
 	void SpawnAt(runline::Vec3 Feet, float Yaw);
 	/// Change the respawn point without moving (checkpoints).
