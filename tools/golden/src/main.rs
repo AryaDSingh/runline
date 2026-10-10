@@ -2,6 +2,7 @@
 mod common;
 mod levels;
 mod locomotion;
+mod look;
 mod mesh;
 mod probes;
 mod scalars;
@@ -31,6 +32,7 @@ fn main() {
     common::write(&dir, "loco_velocity.csv", locomotion::velocity_csv());
     common::write(&dir, "tuning.txt", tuning::txt());
     common::write(&dir, "vault_types.csv", vault::types_csv());
+    common::write(&dir, "look_limits.csv", look::csv());
     common::write_reference(&dir);
     levels::write_all();
 }

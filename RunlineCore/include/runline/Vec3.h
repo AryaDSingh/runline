@@ -8,6 +8,11 @@ namespace runline {
 // this against Rust itself.
 inline float FMin(float a, float b) { return a < b ? a : b; }
 inline float FMax(float a, float b) { return a > b ? a : b; }
+/// Rust's f32::rem_euclid.
+inline float RemEuclid(float a, float b) {
+    const float r = std::fmod(a, b);
+    return r < 0.0f ? r + std::fabs(b) : r;
+}
 /// Rust's f32::clamp: below `lo` gives `lo`, above `hi` gives `hi`.
 inline float FClamp(float x, float lo, float hi) {
     if (x < lo) x = lo;

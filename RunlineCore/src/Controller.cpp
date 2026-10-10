@@ -23,11 +23,6 @@ float Smoothstep(float x) {
 }
 /// Rust's f32::signum: +-1 by the sign bit (so 0.0 gives 1.0).
 float Signum(float x) { return std::copysign(1.0f, x); }
-/// Rust's f32::rem_euclid.
-float RemEuclid(float a, float b) {
-    const float r = std::fmod(a, b);
-    return r < 0.0f ? r + std::fabs(b) : r;
-}
 /// glam's Vec3::clamp_length_max.
 Vec3 ClampLengthMax(Vec3 v, float max) {
     const float lengthSq = v.LengthSquared();
