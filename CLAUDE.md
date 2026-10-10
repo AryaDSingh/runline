@@ -5,6 +5,11 @@ Spec: docs/superpowers/specs/2026-10-09-faith-movement-port-design.md
 
 ## Build and test
 - `powershell -ExecutionPolicy Bypass -File scripts/test.ps1`: configures, builds and runs all RunlineCore tests (no Unreal needed).
+- `powershell -ExecutionPolicy Bypass -File scripts/test-unreal.ps1 [-Filter Runline.World]`: builds the
+  RunlineEditor target (UE at D:\UE_5.8, or $env:UE_ROOT) and runs the Runline.* automation tests headless;
+  the log is build/unreal-tests.log.
+- `scripts/build-core-ue.ps1`: RunlineCore as a Release static library for Unreal (build/RunlineCore-ue); UBT
+  runs it as a pre-build step, so it rarely needs running by hand.
 - Golden data: `cargo run --release` in tools/golden (needs the reference clone at
   ../faith-runner). It rewrites RunlineCore/tests/golden/*.csv and REFERENCE (the faith-runner
   commit used; currently 9470d755). Regenerate only from a clean checkout, and commit all three.
