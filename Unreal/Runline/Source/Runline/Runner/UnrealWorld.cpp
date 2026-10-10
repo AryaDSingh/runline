@@ -54,15 +54,17 @@ void FUnrealWorld::GatherBoxes(const runline::Aabb& Region, std::vector<runline:
 			WarnUnsupported(*C);
 			continue;
 		}
-		const FVector Ext = Box->GetScaledBoxExtent();
+		const FVector Ext = Box->GetScaledBoxExtent().GetAbs();
 		const FVector Center = Box->GetComponentLocation();
 		Found.Add({OrderOf(*C), RunlineUnits::ToCoreBox(FBox(Center - Ext, Center + Ext))});
 	}
-	Found.Sort([](const FCandidate& A, const FCandidate& B)
+	Found.StableSort([](const FCandidate& A, const FCandidate& B)
 	{
 		if (A.Order != B.Order) return A.Order < B.Order;
 		const runline::Vec3 a = A.Box.min, b = B.Box.min;
-		return a.x != b.x ? a.x < b.x : a.y != b.y ? a.y < b.y : a.z < b.z;
+		if (a.x != b.x || a.y != b.y || a.z != b.z) return a.x != b.x ? a.x < b.x : a.y != b.y ? a.y < b.y : a.z < b.z;
+		const runline::Vec3 c = A.Box.max, d = B.Box.max;
+		return c.x != d.x ? c.x < d.x : c.y != d.y ? c.y < d.y : c.z < d.z;
 	});
 	Out.reserve(Found.Num());
 	for (const FCandidate& F : Found) Out.push_back(F.Box);

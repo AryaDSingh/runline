@@ -121,4 +121,79 @@ bool FRunlineCourseFallback::RunTest(const FString&)
 	return true;
 }
 
+// Review Important 4: a box or checkpoint a designer drags in sorts after the level's own (no
+// clash with faith-runner's box 0 or the start checkpoint).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineCourseNewActors, "Runline.Course.NewActorsSortAfterTheLevel",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineCourseNewActors::RunTest(const FString&)
+{
+	FRunlineTestWorld TW;
+	FRunlineCourseData Data;
+	FRunlineCourseData::Load(TEXT("greybox"), Data);
+	RunlineCourses::Spawn(TW.World, Data, false);
+	ARunlineCheckpoint* Added = TW.World->SpawnActor<ARunlineCheckpoint>();
+	Added->CheckpointName = TEXT("New");
+	const TArray<ARunlineCheckpoint*> Cps = RunlineCourses::Checkpoints(TW.World);
+	TestEqual(TEXT("the start is still the start"), Cps[0]->CheckpointName, Data.Checkpoints[0].Name);
+	TestTrue(TEXT("the new one comes last"), Cps.Last() == Added);
+	ARunlineBox* Box = TW.World->SpawnActor<ARunlineBox>();
+	Box->UpdateVisual();
+	bool bHasOrderTag = false;
+	for (const FName& Tag : Box->Box->ComponentTags) bHasOrderTag |= Tag.ToString().StartsWith(TEXT("RunlineOrder"));
+	TestFalse(TEXT("a new box takes no level order (it sorts after the level's)"), bHasOrderTag);
+	return true;
+}
+
+// Review Important 6: the CSV fallback only fills an empty map; a map with the designer's own boxes
+// is left alone.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineCourseFallbackBoxes, "Runline.Course.FallbackLeavesDesignerBoxesAlone",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineCourseFallbackBoxes::RunTest(const FString&)
+{
+	AddExpectedError(TEXT("has boxes but no checkpoints"), EAutomationExpectedErrorFlags::Contains, 1);
+	FRunlineTestWorld TW;
+	ARunlineBox* Mine = TW.World->SpawnActor<ARunlineBox>();
+	Mine->SetFromCore(runline::Aabb::New({-5.0f, -1.0f, -5.0f}, {5.0f, 0.0f, 5.0f}));
+	ARunlineRunGameMode::EnsureCourse(TW.World, TEXT("greybox"));
+	TestEqual(TEXT("no course added on top"), BoxesIn(TW.World).Num(), 1);
+	return true;
+}
+
+#if WITH_EDITOR
+// Review Important 2-3: rotating or scaling a box, checkpoint or finish in the editor folds into the
+// box (the core is axis-aligned): what's drawn is what the core collides with and where she spawns.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineCourseFold, "Runline.Course.RotationAndScaleFoldIntoTheBox",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineCourseFold::RunTest(const FString&)
+{
+	FRunlineTestWorld TW;
+	ARunlineBox* A = TW.World->SpawnActor<ARunlineBox>();
+	A->SetFromCore(runline::Aabb::New({-1.0f, 0.0f, -3.0f}, {1.0f, 1.0f, 3.0f}));
+	A->SetActorRotation(FRotator(0.0, 90.0, 0.0));
+	A->SetActorScale3D(FVector(1.0, 2.0, -1.0));
+	const FBox Before = A->Box->Bounds.GetBox();   // what the editor draws for the turned, scaled box
+	A->RerunConstructionScripts();
+	TestTrue(TEXT("box: no rotation left"), A->GetActorRotation().IsNearlyZero(1e-6));
+	TestTrue(TEXT("box: no scale left"), A->GetActorScale3D().Equals(FVector::OneVector, 1e-9));
+	TestTrue(TEXT("box: same space as before the fold"), A->Box->Bounds.GetBox().Equals(Before, 0.01));
+	const FBox Drawn = A->Mesh->Bounds.GetBox();
+	const FUnrealWorld W(TW.World, nullptr);
+	TestTrue(TEXT("box: the core collides with what's drawn"), W.Overlaps(RunlineUnits::ToCoreBox(Drawn.ExpandBy(-1.0))));
+	TestTrue(TEXT("box: the core's box is what's drawn"), RunlineUnits::ToUnrealBox(A->CoreBox()).Equals(Drawn, 0.01));
+	ARunlineCheckpoint* C = TW.World->SpawnActor<ARunlineCheckpoint>();
+	C->Region->SetBoxExtent(FVector(100.0, 300.0, 100.0));
+	C->SpawnPoint = FVector(200.0, 0.0, 0.0);
+	C->SetActorLocation(FVector(1000.0, 0.0, 0.0));
+	C->SetActorRotation(FRotator(0.0, 90.0, 0.0));
+	const FVector TurnedSpawn = C->GetActorTransform().TransformPosition(C->SpawnPoint);
+	const FBox TurnedRegion = C->Region->Bounds.GetBox();
+	C->RerunConstructionScripts();
+	TestTrue(TEXT("checkpoint: no rotation left"), C->GetActorRotation().IsNearlyZero(1e-6));
+	TestTrue(TEXT("checkpoint: spawn stays where it was drawn"), RunlineUnits::ToUnrealPosition(C->CoreSpawn()).Equals(TurnedSpawn, 0.01));
+	TestTrue(TEXT("checkpoint: region stays where it was drawn"), RunlineUnits::ToUnrealBox(C->CoreRegion()).Equals(TurnedRegion, 0.01));
+	TestEqual(TEXT("checkpoint: the turn carried into the spawn yaw"), C->SpawnYawDegrees, 90.0f, 1e-3f);
+	return true;
+}
+#endif
+
 #endif

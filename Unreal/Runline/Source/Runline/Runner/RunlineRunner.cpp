@@ -79,9 +79,16 @@ void ARunlineRunner::BeginPlay()
 {
 	Super::BeginPlay();
 	AddTickPrerequisiteComponent(GetCharacterMovement());
+	FindCourse();
+}
+
+void ARunlineRunner::FindCourse()
+{
+	Checkpoints.Reset();
 	for (ARunlineCheckpoint* C : RunlineCourses::Checkpoints(GetWorld())) Checkpoints.Add(C);
 	if (Checkpoints.Num() > 0) Runline().SpawnAt(Checkpoints[0]->CoreSpawn(), Checkpoints[0]->CoreYaw());
 	Finish = RunlineCourses::Finish(GetWorld());
+	Checkpoint = 0;
 }
 
 void ARunlineRunner::Tick(float DeltaSeconds)
@@ -92,10 +99,16 @@ void ARunlineRunner::Tick(float DeltaSeconds)
 	Camera->SetFieldOfView(M.GetRenderFov());
 	UpdateBodyPlacement();
 	if (AController* C = GetController()) C->SetControlRotation(M.GetRenderRotation());
+	UpdateCourse(DeltaSeconds);
+}
+
+void ARunlineRunner::UpdateCourse(float DeltaSeconds)
+{
+	const URunlineMovementComponent& M = Runline();
 	// Checkpoints: faith-runner's app takes a checkpoint further on than the current one.
 	TArray<ARunlineCheckpoint*> Cps(Checkpoints);
 	const int32 At = RunlineCourses::CheckpointAt(Cps, M.Core().feet);
-	if (At > Checkpoint)
+	if (At > Checkpoint && !bFinishedHold)
 	{
 		Checkpoint = At;
 		Runline().SetRespawn(Cps[At]->CoreSpawn(), Cps[At]->CoreYaw());
@@ -107,8 +120,9 @@ void ARunlineRunner::Tick(float DeltaSeconds)
 	const bool bInFinish = Finish && RunlineCourses::Inside(Finish->CoreRegion(), Core.feet);
 	if (Clock.Update(DeltaSeconds, At == 0, std::holds_alternative<runline::Ground>(Core.state), bInFinish, Checkpoint))
 	{
-		// faith-runner: the finish puts you back on the start checkpoint.
+		// faith-runner: the finish puts you back on the start checkpoint (held until a respawn).
 		Checkpoint = 0;
+		bFinishedHold = true;
 		if (Cps.Num() > 0) Runline().SetRespawn(Cps[0]->CoreSpawn(), Cps[0]->CoreYaw());
 		FinishShownFor = 3.0f;
 	}
@@ -185,6 +199,14 @@ void ARunlineRunner::BuildInput()
 	for (const FKey& K : {EKeys::Q, EKeys::Gamepad_FaceButton_Top}) Mapping->MapKey(TurnAction, K);
 	for (const FKey& K : {EKeys::R, EKeys::Gamepad_Special_Left}) Mapping->MapKey(RespawnAction, K);
 	for (const FKey& K : {EKeys::Escape, EKeys::Gamepad_Special_Right}) Mapping->MapKey(MenuAction, K);
+	// faith-runner's number keys: 1-9 put you at that checkpoint (1 restarts the run).
+	const FKey Digits[] = {EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine};
+	for (const FKey& K : Digits)
+	{
+		UInputAction* A = Make(*FString::Printf(TEXT("Checkpoint%s"), *K.ToString()), EInputActionValueType::Boolean);
+		Mapping->MapKey(A, K);
+		CheckpointActions.Add(A);
+	}
 }
 
 void ARunlineRunner::PawnClientRestart()
@@ -226,6 +248,8 @@ void ARunlineRunner::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 	In->BindAction(TurnAction, ETriggerEvent::Started, this, &ARunlineRunner::OnTurn);
 	In->BindAction(RespawnAction, ETriggerEvent::Started, this, &ARunlineRunner::OnRespawn);
 	In->BindAction(MenuAction, ETriggerEvent::Started, this, &ARunlineRunner::OnMenu);
+	for (int32 I = 0; I < CheckpointActions.Num(); ++I)
+		In->BindActionValueLambda(CheckpointActions[I], ETriggerEvent::Started, [this, I](const FInputActionValue&) { RespawnAt(I); });
 }
 
 void ARunlineRunner::OnMove(const FInputActionValue& V) { KeyMove = V.Get<FVector2D>(); PushMove(); }
@@ -242,8 +266,17 @@ void ARunlineRunner::OnCrouchStop(const FInputActionValue&) { Runline().SetCrouc
 void ARunlineRunner::OnTurn(const FInputActionValue&) { Runline().PressTurn(); }
 void ARunlineRunner::OnRespawn(const FInputActionValue&) { RespawnHere(); }
 
+void ARunlineRunner::RespawnAt(int32 Index)
+{
+	if (!Checkpoints.IsValidIndex(Index)) return;
+	Checkpoint = Index;
+	Runline().SetRespawn(Checkpoints[Index]->CoreSpawn(), Checkpoints[Index]->CoreYaw());
+	RespawnHere();
+}
+
 void ARunlineRunner::RespawnHere()
 {
+	bFinishedHold = false;
 	Runline().Respawn();
 	Clock.OnRespawn(Checkpoint);
 }

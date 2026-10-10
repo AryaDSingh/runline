@@ -69,13 +69,19 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineBakeTwice, "Runline.Bake.RebakeReplaces
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FRunlineBakeTwice::RunTest(const FString&)
 {
+	// Rooftops first, then greybox over it: the file must end up greybox, not rooftops plus greybox.
 	FRunlineCourseData Data;
 	FRunlineCourseData::Load(TEXT("greybox"), Data);
-	RunlineBake::BakeCourse(TEXT("greybox"), TestMap);
-	RunlineBake::BakeCourse(TEXT("greybox"), TestMap);
+	TestNotNull(TEXT("first bake"), RunlineBake::BakeCourse(TEXT("rooftops"), TestMap));
+	TestNotNull(TEXT("second bake"), RunlineBake::BakeCourse(TEXT("greybox"), TestMap));
 	UWorld* World = UEditorLoadingAndSavingUtils::LoadMap(TestMap);
 	TestNotNull(TEXT("loads"), World);
-	if (World) TestEqual(TEXT("boxes once"), Count(World, ARunlineBox::StaticClass()), Data.Boxes.Num());
+	if (World)
+	{
+		TestEqual(TEXT("greybox's boxes, once"), Count(World, ARunlineBox::StaticClass()), Data.Boxes.Num());
+		const TArray<ARunlineCheckpoint*> Cps = RunlineCourses::Checkpoints(World);
+		TestTrue(TEXT("greybox's checkpoints"), Cps.Num() == Data.Checkpoints.Num() && Cps[0]->CheckpointName == Data.Checkpoints[0].Name);
+	}
 	DeleteTestMap();
 	return true;
 }

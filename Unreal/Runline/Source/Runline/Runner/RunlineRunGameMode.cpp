@@ -6,6 +6,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "RunlineCourseActors.h"
 #include "RunlineCourseData.h"
+#include "EngineUtils.h"
 #include "RunlineMovementComponent.h"
 #include "RunlineRunner.h"
 
@@ -86,6 +87,12 @@ void ARunlineRunGameMode::StartPlay()
 void ARunlineRunGameMode::EnsureCourse(UWorld* World, const FString& CourseName)
 {
 	if (RunlineCourses::Checkpoints(World).Num() > 0) return;   // the map has its own course
+	if (TActorIterator<ARunlineBox>(World))
+	{
+		// A map being built: don't drop the CSV course on top of the designer's boxes.
+		UE_LOG(LogRunlineGame, Error, TEXT("Runline: %s has boxes but no checkpoints; add an ARunlineCheckpoint (Index 0) to start the runner on it"), *World->GetMapName());
+		return;
+	}
 	FRunlineCourseData Data;
 	if (FRunlineCourseData::Load(CourseName, Data)) RunlineCourses::Spawn(World, Data, true);
 }

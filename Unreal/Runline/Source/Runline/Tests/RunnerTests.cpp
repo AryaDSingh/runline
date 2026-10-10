@@ -5,6 +5,8 @@
 #include "RunlineTestWorld.h"
 #include "RunlineSettings.h"
 #include "RunlineMovementComponent.h"
+#include "RunlineCourseActors.h"
+#include "RunlineCourseData.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -115,6 +117,42 @@ bool FRunlineRunnerGameSpeed::RunTest(const FString&)
 	FRunlineTestWorld TW;
 	ARunlineRunner* R = TW.World->SpawnActor<ARunlineRunner>();
 	TestEqual(TEXT("game speed"), R->Runline().GameSpeed, 1.25f);
+	return true;
+}
+
+// Review Critical 1: the time trial runs again and again. The finish sits inside the last
+// checkpoint's region; after finishing, she must not re-take it, and a respawn puts her at the
+// start with a clock that starts again.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineRunnerTrialAgain, "Runline.Runner.TimeTrialRunsAgain",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineRunnerTrialAgain::RunTest(const FString&)
+{
+	FRunlineTestWorld TW;
+	FRunlineCourseData Data;
+	FRunlineCourseData::Load(TEXT("rooftops"), Data);
+	RunlineCourses::Spawn(TW.World, Data, false);
+	ARunlineRunner* R = TW.World->SpawnActor<ARunlineRunner>();
+	R->FindCourse();
+	runline::Controller& C = R->Runline().MutableCore();
+	const auto PutAt = [&](runline::Vec3 P) { C.feet = P; C.state = runline::Ground{}; };
+	const runline::Aabb Fin = *Data.Finish;
+	const runline::Vec3 InFinish = (Fin.min + Fin.max) * 0.5f;
+	for (int32 Run = 0; Run < 2; ++Run)
+	{
+		PutAt({0.0f, 0.0f, -10.0f});   // out of the start, on the roof
+		R->UpdateCourse(0.5f);
+		TestTrue(FString::Printf(TEXT("run %d: the clock starts"), Run), R->Timer().Running.IsSet());
+		PutAt(InFinish);
+		R->UpdateCourse(0.5f);
+		TestTrue(FString::Printf(TEXT("run %d: finished"), Run), R->Timer().Last.IsSet() && !R->Timer().Running.IsSet());
+		R->UpdateCourse(0.5f);   // still standing in the finish (and in the last checkpoint)
+		TestEqual(FString::Printf(TEXT("run %d: still on the start checkpoint"), Run), R->CurrentCheckpoint(), 0);
+		R->RespawnHere();
+		TestTrue(FString::Printf(TEXT("run %d: respawned at the start"), Run), R->Runline().Core().feet == Data.Checkpoints[0].Spawn);
+	}
+	// faith-runner's number keys: 3 puts her at the third checkpoint.
+	R->RespawnAt(2);
+	TestTrue(TEXT("key 3: checkpoint 3"), R->Runline().Core().feet == Data.Checkpoints[2].Spawn);
 	return true;
 }
 

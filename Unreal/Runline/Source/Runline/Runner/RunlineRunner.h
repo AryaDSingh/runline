@@ -41,6 +41,13 @@ public:
 	const FRunlineTimer& Timer() const { return Clock; }
 	/// Respawns at the current checkpoint (R, the menu) and tells the clock.
 	void RespawnHere();
+	/// Respawns at checkpoint Index (faith-runner's number keys: 1 is the start).
+	void RespawnAt(int32 Index);
+	/// Finds the map's checkpoints and finish and spawns at the start (BeginPlay).
+	void FindCourse();
+	/// Checkpoints and the time trial for one frame of DeltaSeconds (Tick).
+	void UpdateCourse(float DeltaSeconds);
+	int32 CurrentCheckpoint() const { return Checkpoint; }
 
 private:
 	void BuildInput();
@@ -75,6 +82,7 @@ private:
 	UPROPERTY() TObjectPtr<UInputAction> TurnAction;
 	UPROPERTY() TObjectPtr<UInputAction> RespawnAction;
 	UPROPERTY() TObjectPtr<UInputAction> MenuAction;
+	UPROPERTY() TArray<TObjectPtr<UInputAction>> CheckpointActions;
 	TSharedPtr<class SRunlineMenu> Menu;
 	UPROPERTY() TArray<TObjectPtr<ARunlineCheckpoint>> Checkpoints;
 	UPROPERTY() TObjectPtr<ARunlineFinish> Finish;
@@ -84,6 +92,9 @@ private:
 	TSharedPtr<class SWidget> Hud;
 	FText HudText() const;
 	int32 Checkpoint = 0;
+	/// After a finish: on the start checkpoint until she respawns (the finish sits inside the last
+	/// checkpoint's region, which would be taken again at once).
+	bool bFinishedHold = false;
 	// Keys and stick, summed as faith-runner does (the core clamps the length).
 	FVector2D KeyMove = FVector2D::ZeroVector;
 	FVector2D PadMove = FVector2D::ZeroVector;

@@ -28,8 +28,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Runline") ERunlineLook Look = ERunlineLook::Roof;
 	/// False: drawn only (painted markings), never collided with.
 	UPROPERTY(EditAnywhere, Category = "Runline") bool bSolid = true;
-	/// faith-runner's level order (solids); used to break exact ties.
-	UPROPERTY(EditAnywhere, Category = "Runline") int32 Order = 0;
+	/// faith-runner's level order (solids); used to break exact ties. -1 (a box you placed): after
+	/// every level box.
+	UPROPERTY(EditAnywhere, Category = "Runline") int32 Order = -1;
 
 	/// Places the actor and sizes the box to a core box (metres).
 	void SetFromCore(const runline::Aabb& B);
@@ -53,8 +54,8 @@ public:
 	/// The region (no collision; drawn in the editor).
 	UPROPERTY(VisibleAnywhere, Category = "Runline") TObjectPtr<UBoxComponent> Region;
 	UPROPERTY(EditAnywhere, Category = "Runline") FString CheckpointName;
-	/// Order along the course (0 is the start).
-	UPROPERTY(EditAnywhere, Category = "Runline") int32 Index = 0;
+	/// Order along the course (0 is the start). -1 (one you placed): after the numbered ones.
+	UPROPERTY(EditAnywhere, Category = "Runline") int32 Index = -1;
 	/// Where she respawns, relative to the actor.
 	UPROPERTY(EditAnywhere, Category = "Runline", meta = (MakeEditWidget)) FVector SpawnPoint = FVector::ZeroVector;
 	/// Which way she faces when she respawns (Unreal yaw, degrees).
@@ -63,6 +64,7 @@ public:
 	runline::Aabb CoreRegion() const;
 	runline::Vec3 CoreSpawn() const;
 	float CoreYaw() const;
+	virtual void OnConstruction(const FTransform& Transform) override;
 };
 
 /// The finish: reaching its region stops the time trial.
@@ -75,6 +77,7 @@ public:
 	ARunlineFinish();
 	UPROPERTY(VisibleAnywhere, Category = "Runline") TObjectPtr<UBoxComponent> Region;
 	runline::Aabb CoreRegion() const;
+	virtual void OnConstruction(const FTransform& Transform) override;
 };
 
 namespace RunlineCourses

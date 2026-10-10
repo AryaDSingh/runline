@@ -62,6 +62,21 @@ namespace
 		return RunlineUnits::ToCoreBox(FBox(C - E, C + E));
 	}
 
+	/// The core is axis-aligned: a rotation or scale a designer gives a course actor is folded into its
+	/// box (the box's world bounds become its extent; exact for quarter turns), and a checkpoint's
+	/// spawn point and yaw turn with it, so what the editor drew is what the core uses.
+	void FoldTransform(AActor& Actor, UBoxComponent& Box, FVector* SpawnPoint = nullptr, float* SpawnYaw = nullptr)
+	{
+		const FTransform T = Actor.GetActorTransform();
+		if (T.GetRotation().IsIdentity(1e-8) && T.GetScale3D().Equals(FVector::OneVector, 1e-9)) return;
+		const FBox World = Box.Bounds.GetBox();
+		const FVector Spawn = SpawnPoint ? T.TransformPosition(*SpawnPoint) : FVector::ZeroVector;
+		if (SpawnYaw) *SpawnYaw = float(FRotator::NormalizeAxis(*SpawnYaw + T.Rotator().Yaw));
+		Actor.SetActorTransform(FTransform(FQuat::Identity, World.GetCenter(), FVector::OneVector));
+		Box.SetBoxExtent(World.GetExtent(), false);
+		if (SpawnPoint) *SpawnPoint = Spawn - World.GetCenter();
+	}
+
 	void PlaceBox(AActor& Actor, UBoxComponent& Box, const runline::Aabb& Core)
 	{
 		const FBox U = RunlineUnits::ToUnrealBox(Core);
@@ -107,6 +122,7 @@ runline::Aabb ARunlineBox::CoreBox() const { return CoreBoxOf(*Box); }
 void ARunlineBox::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
+	FoldTransform(*this, *Box);
 	UpdateVisual();
 }
 
@@ -114,11 +130,12 @@ void ARunlineBox::UpdateVisual()
 {
 	// The engine cube is 100 cm: scale it to the box (extent is half the size).
 	Mesh->SetRelativeScale3D(Box->GetUnscaledBoxExtent() / 50.0);
-	Box->ComponentTags.Reset();
+	Box->ComponentTags.RemoveAll([](const FName& Tag) { return Tag.ToString().StartsWith(TEXT("RunlineOrder")); });
 	if (bSolid)
 	{
 		Box->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
-		Box->ComponentTags.Add(FName(*FString::Printf(TEXT("RunlineOrder%d"), Order)));
+		// Only level boxes carry an order; a placed one sorts after them (FUnrealWorld).
+		if (Order >= 0) Box->ComponentTags.Add(FName(*FString::Printf(TEXT("RunlineOrder%d"), Order)));
 	}
 	else
 	{
@@ -149,6 +166,12 @@ runline::Aabb ARunlineCheckpoint::CoreRegion() const { return CoreBoxOf(*Region)
 runline::Vec3 ARunlineCheckpoint::CoreSpawn() const { return RunlineUnits::ToCorePosition(GetActorLocation() + SpawnPoint); }
 float ARunlineCheckpoint::CoreYaw() const { return RunlineUnits::ToCoreYaw(SpawnYawDegrees); }
 
+void ARunlineCheckpoint::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	FoldTransform(*this, *Region, &SpawnPoint, &SpawnYawDegrees);
+}
+
 ARunlineFinish::ARunlineFinish()
 {
 	PrimaryActorTick.bCanEverTick = false;
@@ -157,6 +180,12 @@ ARunlineFinish::ARunlineFinish()
 }
 
 runline::Aabb ARunlineFinish::CoreRegion() const { return CoreBoxOf(*Region); }
+
+void ARunlineFinish::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	FoldTransform(*this, *Region);
+}
 
 // ---------------------------------------------------------------- spawning
 
@@ -208,7 +237,12 @@ TArray<ARunlineCheckpoint*> RunlineCourses::Checkpoints(const UWorld* World)
 {
 	TArray<ARunlineCheckpoint*> Out;
 	for (TActorIterator<ARunlineCheckpoint> It(const_cast<UWorld*>(World)); It; ++It) Out.Add(*It);
-	Out.Sort([](const ARunlineCheckpoint& A, const ARunlineCheckpoint& B) { return A.Index < B.Index; });
+	// Numbered ones in order; ones a designer placed (Index -1) after them, by name; stable for ties.
+	const auto Key = [](const ARunlineCheckpoint& C) { return C.Index < 0 ? MAX_int32 : C.Index; };
+	Out.StableSort([&Key](const ARunlineCheckpoint& A, const ARunlineCheckpoint& B)
+	{
+		return Key(A) != Key(B) ? Key(A) < Key(B) : A.CheckpointName < B.CheckpointName;
+	});
 	return Out;
 }
 
