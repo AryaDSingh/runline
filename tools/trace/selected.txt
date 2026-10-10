@@ -155,3 +155,6 @@ springboard_tests__lane_4_over_the_pit__3
 springboard_tests__lane_4_over_the_pit__4
 springboard_tests__lane_4_over_the_pit__5
 springboard_tests__lane_4_over_the_pit__6
+# M1d grab transfer (review fix)
+tests__grab_transfer_up_to_the_ledge_above__1
+tests__grab_transfer_up_to_the_ledge_above__2

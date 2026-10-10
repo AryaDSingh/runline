@@ -41,10 +41,6 @@ bool Controller::TryVertigo(const World&) { return false; }
 // NOT PORTED: controller.rs try_grab_fixture (M4): ziplines and swing poles; there are none.
 bool Controller::TryGrabFixture(const World&) { return false; }
 
-// NOT PORTED: grabtransfer.rs try_grab_transfer (M1d if a selected trace needs it, else M4): a
-// ledge-to-ledge transfer when pushing up on a hang.
-bool Controller::TryGrabTransfer(Vec3, float, const World&) { return false; }
-
 // NOT PORTED: controller.rs soft_below / check_barbed_wire (M4): both look for fixtures (SoftPad,
 // BarbedWire), and the C++ World has none until fixtures are ported.
 bool Controller::SoftBelow(const World&, float) const { return false; }

@@ -74,6 +74,7 @@ const char* StateName(const State& s) {
     if (const auto* h = std::get_if<LedgeHang>(&s)) return h->turned ? "Ledge hang (turned)" : "Ledge hang";
     if (Is<SoftLand>(s)) return "Soft landing";
     if (const auto* v = std::get_if<Vault>(&s)) return v->Onto() ? "Vault onto" : "Vault";
+    if (Is<GrabTransfer>(s)) return "Grab transfer";
     if (const auto* tr = std::get_if<Traverse>(&s)) {
         switch (tr->kind) {
             case TraverseKind::Vault: return "Vault";
@@ -372,6 +373,7 @@ void Controller::Substep(float dt, const Input& input, const World& world) {
     else if (const auto* sl = std::get_if<Slide>(&state)) SlideState(dt, sl->t, input, world);
     else if (const auto* r = std::get_if<Roll>(&state)) RollState(dt, r->t, world);
     else if (const auto* v = std::get_if<Vault>(&state)) VaultState(dt, *v, world);
+    else if (const auto* g = std::get_if<GrabTransfer>(&state)) GrabTransferState(dt, *g);
     else if (const auto* tr = std::get_if<Traverse>(&state)) TraverseState(dt, *tr, world);
     else UnportedState(state, dt, input, world);
 
@@ -1417,6 +1419,45 @@ void Controller::ShimmyUpdate(float dt, Vec3 n, float ledgeY, const Input& input
     if (hangsAt(to, side) && world.IsFree(body.AabbAt(around))) {
         shimmy = Shimmy{dir, 0.0f, feet, to, side, yaw};
         events.push_back({EventKind::ShimmyCorner});
+    }
+}
+
+/// Mirror's Edge's grab transfer (TdMove_GrabTransfer), up: hanging from a ledge, jump while pushing
+/// up and, with another ledge within AllowedZTransferDistance (140 uu) above and the way clear, she
+/// reaches up to it at max(distance / 0.55, 200) uu/s and hangs from it.
+bool Controller::TryGrabTransfer(Vec3 n, float ledgeY, const World& world) {
+    const Tuning& tu = tuning;
+    const Body body = GetBody();
+    const float hands = tu.hangHandsAboveFeet;
+    // The wall above this ledge (it may be set back from it), and a ledge on it in reach.
+    const Vec3 above{feet.x, ledgeY + 0.05f, feet.z};
+    const auto wall = TraceWall(world, body, above, -n, 1.0f, body.height * 0.5f);
+    const float back = wall ? wall->gap : 0.0f;
+    const Vec3 at = feet - n * back;
+    const auto top = FindLedge(world, body, at, n, hands + 0.3f, hands + Uu(140.0f), tu.crouchHeight);
+    if (!top) return false;
+    const Vec3 to{at.x, *top - hands, at.z};
+    // bFitForGrab: the way up is clear.
+    const Vec3 half = body.AabbAt(Vec3::Zero()).Size() * 0.5f;
+    if (world.Sweep(half * 0.95f, feet + Vec3::UnitY() * half.y + n * 0.02f, to - feet)) return false;
+    const float dist = (to - feet).Length();
+    const float dur = dist / FMax(dist / 0.55f, Uu(200.0f));
+    state = GrabTransfer{0.0f, feet, to, dur, n, *top};
+    events.push_back({EventKind::GrabTransfer});
+    return true;
+}
+
+void Controller::GrabTransferState(float dt, GrabTransfer g) {
+    g.t = g.t + dt;
+    const float k = g.dur > 1e-4f ? FMin(g.t / g.dur, 1.0f) : 1.0f;
+    feet = Lerp(g.from, g.to, k);
+    vel = Vec3::Zero();
+    if (k >= 1.0f) {
+        state = LedgeHang{g.normal, g.ledgeY, false};
+        hangTime = 0.0f;
+        shimmy.reset();
+    } else {
+        state = g;
     }
 }
 

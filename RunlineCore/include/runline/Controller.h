@@ -4,9 +4,10 @@
 // Call Controller::Step once per frame with the frame's input. It substeps internally at 120 Hz
 // so feel doesn't change with frame rate.
 //
-// M1c ports the core: the Ground and Air states, jumping, landing, the hard landing, integrate
-// and the view. Moves not ported yet are stubs (src/ControllerStubs.cpp): checks answer "nothing
-// here" and the states throw NotPorted, so a replay that needs one fails loudly.
+// Ported (M1c/M1d): ground and air, jumps and dodges, landings, wallrun, wallclimb and its turn,
+// ledge hang, shimmy, pull-up and grab transfer, slide, roll, vault and springboard. What's left
+// (attacks, fixtures, ladders, rump slide, balance, vertigo) is stubbed in src/ControllerStubs.cpp:
+// checks answer "nothing here" and states throw NotPorted, so a replay that needs one fails loudly.
 #include <deque>
 #include <optional>
 #include <stdexcept>
@@ -106,6 +107,8 @@ struct WallRun { Vec3 normal{}; float t = 0.0f; };
 struct WallClimb { Vec3 normal{}; float t = 0.0f; };
 struct WallClimbTurned { Vec3 normal{}; float t = 0.0f; };
 struct LedgeHang { Vec3 normal{}; float ledgeY = 0.0f; bool turned = false; };
+/// Reaching up from one ledge to another above (TdMove_GrabTransfer, `grabtransfer`).
+struct GrabTransfer { float t = 0.0f; Vec3 from{}; Vec3 to{}; float dur = 0.0f; Vec3 normal{}; float ledgeY = 0.0f; };
 
 enum class TraverseKind {
     Vault,
@@ -151,7 +154,7 @@ struct Shimmy {
     float yawFrom = 0.0f;
 };
 
-using State = std::variant<Ground, Air, Slide, Roll, Stunned, SoftLand, LayOnGround, WallRun, WallClimb, WallClimbTurned, LedgeHang, Traverse, Vault>;
+using State = std::variant<Ground, Air, Slide, Roll, Stunned, SoftLand, LayOnGround, WallRun, WallClimb, WallClimbTurned, LedgeHang, Traverse, Vault, GrabTransfer>;
 /// State::name(): what the HUD (and the trace) calls it.
 const char* StateName(const State& s);
 
@@ -333,6 +336,7 @@ private:
     void SlideState(float dt, float t, const Input& input, const World& world);
     void RollState(float dt, float t, const World& world);
     void VaultState(float dt, Vault v, const World& world);
+    void GrabTransferState(float dt, GrabTransfer g);
     void CheckBarbedWire(const World& world);
     void Integrate(float dt, const World& world, bool onGround);
     void OffsetMesh(float d);
