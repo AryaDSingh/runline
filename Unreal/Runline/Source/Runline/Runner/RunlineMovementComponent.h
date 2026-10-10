@@ -53,6 +53,8 @@ public:
 	const runline::Controller& Core() const { return *Controller; }
 	runline::Controller& MutableCore() { return *Controller; }
 	int64 StepCount() const { return Steps; }
+	/// The move input the next step will take (x right, y forward).
+	FVector2D GetMoveInput() const { return Move; }
 	float GetAccumulator() const { return Accumulator; }
 	/// How many times a step reached code the core hasn't ported (and was turned into a respawn).
 	int32 NotPortedCount() const { return NotPorted; }

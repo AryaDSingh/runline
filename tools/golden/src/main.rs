@@ -1,5 +1,6 @@
 //! Writes reference results from faith-runner's faith_move for RunlineCore's golden tests.
 mod common;
+mod levels;
 mod locomotion;
 mod mesh;
 mod probes;
@@ -31,4 +32,5 @@ fn main() {
     common::write(&dir, "tuning.txt", tuning::txt());
     common::write(&dir, "vault_types.csv", vault::types_csv());
     common::write_reference(&dir);
+    levels::write_all();
 }

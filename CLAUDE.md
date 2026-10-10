@@ -10,6 +10,9 @@ Spec: docs/superpowers/specs/2026-10-09-faith-movement-port-design.md
   the log is build/unreal-tests.log.
 - `scripts/build-core-ue.ps1`: RunlineCore as a Release static library for Unreal (build/RunlineCore-ue); UBT
   runs it as a pre-build step, so it rarely needs running by hand.
+- Play a course (rooftops or greybox) on an empty map; add `?shot=20` to screenshot after 20 s and quit
+  (the game window takes keyboard focus, so type nothing meanwhile):
+  `& 'D:\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe' "$PWD\Unreal\Runline\Runline.uproject" '/Engine/Maps/Entry?game=/Script/Runline.RunlineRunGameMode?course=rooftops' -game -windowed -ResX=1600 -ResY=900`
 - Golden data: `cargo run --release` in tools/golden (needs the reference clone at
   ../faith-runner). It rewrites RunlineCore/tests/golden/*.csv and REFERENCE (the faith-runner
   commit used; currently 9470d755). Regenerate only from a clean checkout, and commit all three.
