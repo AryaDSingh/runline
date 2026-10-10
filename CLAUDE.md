@@ -13,9 +13,11 @@ Spec: docs/superpowers/specs/2026-10-09-faith-movement-port-design.md
 - `powershell -ExecutionPolicy Bypass -File scripts/bake-courses.ps1`: bakes Data/Levels/{rooftops,greybox}.csv into
   /Game/Runline/Maps/{Rooftops,Greybox} (the RunlineBakeCourse commandlet, RunlineEditor module). Re-baking replaces
   hand edits in those maps; commit the .umaps (LFS).
-- Play a course (rooftops or greybox) on an empty map; add `?shot=20` to screenshot after 20 s and quit
-  (the game window takes keyboard focus, so type nothing meanwhile):
-  `& 'D:\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe' "$PWD\Unreal\Runline\Runline.uproject" '/Engine/Maps/Entry?game=/Script/Runline.RunlineRunGameMode?course=rooftops' -game -windowed -ResX=1600 -ResY=900`
+- Play: `& 'D:\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe' "$PWD\Unreal\Runline\Runline.uproject" -game -windowed -ResX=1600 -ResY=900`
+  opens the baked Rooftops map (the editor opens on it too). A CSV course on the empty map instead: add
+  `'/Engine/Maps/Entry?game=/Script/Runline.RunlineRunGameMode?course=greybox'`. Dev URL options: `?shot=20`
+  (screenshot after 20 s, then quit), `?autorun=1`, `?pitch=-60`, `?menu=1`. The game window takes keyboard focus,
+  so type nothing meanwhile.
 - Golden data: `cargo run --release` in tools/golden (needs the reference clone at
   ../faith-runner). It rewrites RunlineCore/tests/golden/*.csv, Unreal/Runline/Data/Levels/*.csv and REFERENCE (the faith-runner
   commit used; currently 9470d755). Regenerate only from a clean checkout, and commit all three.
