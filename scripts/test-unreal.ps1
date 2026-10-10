@@ -16,5 +16,6 @@ $passed = ([regex]::Matches($text, 'Test Completed\. Result=\{Success\}')).Count
 $failed = ([regex]::Matches($text, 'Test Completed\. Result=\{(Fail|Failed)\}')).Count
 Select-String -Path $log -Pattern 'Result=\{Fail|Error: ' | ForEach-Object { $_.Line }
 Write-Host "Unreal tests: $passed passed, $failed failed"
+if ($text -match 'Critical error|Fatal error') { Write-Host 'Unreal crashed during the tests (see the log)'; exit 1 }
 if ($failed -gt 0 -or $passed -eq 0) { exit 1 }
 exit 0

@@ -28,6 +28,10 @@ public:
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 	virtual void PawnClientRestart() override;
 
+	/// Opens the pause menu (pauses, shows the cursor) or closes it (saves the settings, resumes).
+	void ToggleMenu();
+	bool IsMenuOpen() const { return Menu.IsValid(); }
+
 private:
 	void BuildInput();
 	void OnMove(const FInputActionValue& V);
@@ -43,6 +47,7 @@ private:
 	void OnCrouchStop(const FInputActionValue& V);
 	void OnTurn(const FInputActionValue& V);
 	void OnRespawn(const FInputActionValue& V);
+	void OnMenu(const FInputActionValue& V);
 
 	UPROPERTY(VisibleAnywhere, Category = "Runline")
 	TObjectPtr<UCameraComponent> Camera;
@@ -55,6 +60,8 @@ private:
 	UPROPERTY() TObjectPtr<UInputAction> CrouchAction;
 	UPROPERTY() TObjectPtr<UInputAction> TurnAction;
 	UPROPERTY() TObjectPtr<UInputAction> RespawnAction;
+	UPROPERTY() TObjectPtr<UInputAction> MenuAction;
+	TSharedPtr<class SRunlineMenu> Menu;
 	UPROPERTY() TObjectPtr<ARunlineCourse> Course;
 	int32 Checkpoint = 0;
 	// Keys and stick, summed as faith-runner does (the core clamps the length).
