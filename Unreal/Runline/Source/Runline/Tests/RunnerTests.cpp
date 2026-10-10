@@ -80,4 +80,31 @@ bool FRunlineRunnerSavesOnEnd::RunTest(const FString&)
 	return true;
 }
 
+// The arms (via the body they hang off) are interpolated like the camera, not left on the capsule's
+// 60 Hz steps: between steps they keep a fixed offset from the rendered eye, so at high frame rates
+// they don't hop against a camera that glides.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineRunnerArmsSmooth, "Runline.Runner.ArmsMoveWithTheCamera",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineRunnerArmsSmooth::RunTest(const FString&)
+{
+	FRunlineTestWorld TW;
+	TW.AddBox(runline::Aabb::New({-50.0f, -1.0f, -50.0f}, {50.0f, 0.0f, 50.0f}), 0);
+	ARunlineRunner* R = TW.World->SpawnActor<ARunlineRunner>();
+	R->Runline().SpawnAt({0.0f, 0.0f, 0.0f}, 0.0f);
+	R->Runline().SetMove(FVector2D(0.0, 1.0));
+	for (int32 F = 0; F < 120; ++F) R->Runline().Advance(1.0f / 60.0f);   // up to speed
+	double Worst = 0.0;
+	FVector Last = FVector::ZeroVector;
+	for (int32 F = 0; F < 144; ++F)
+	{
+		R->Runline().Advance(1.0f / 144.0f);
+		R->UpdateBodyPlacement();
+		const FVector Offset = R->GetMesh()->GetComponentLocation() - R->Runline().GetRenderBaseEye();
+		if (F > 0) Worst = FMath::Max(Worst, (Offset - Last).Size());
+		Last = Offset;
+	}
+	TestTrue(FString::Printf(TEXT("body keeps its place under the rendered eye (worst hop %.2f cm)"), Worst), Worst < 0.5);
+	return true;
+}
+
 #endif

@@ -17,6 +17,7 @@
 #include "RunlineMovementComponent.h"
 #include "RunlineRunGameMode.h"
 #include "RunlineSettings.h"
+#include "RunlineUnits.h"
 #include "SRunlineMenu.h"
 #include "Engine/GameViewportClient.h"
 #include "Kismet/GameplayStatics.h"
@@ -111,7 +112,11 @@ void ARunlineRunner::UpdateBodyPlacement()
 	// arms stay at the eye.
 	const runline::Controller& C = Runline().Core();
 	const float EyeDrop = (C.GetView().eye.y - C.feet.y) - (C.tuning.standHeight - C.tuning.eyeFromTop);
-	GetMesh()->SetRelativeLocation(FVector(0.0, 0.0, -GetCapsuleComponent()->GetScaledCapsuleHalfHeight() + EyeDrop * 100.0));
+	// And it moves with the rendered (interpolated) eye, not the capsule's 60 Hz steps, so the arms
+	// don't hop against a camera that glides between steps (spec: camera and arms interpolated).
+	const FVector Smoothing = Runline().GetRenderBaseEye() - RunlineUnits::ToUnrealPosition(C.GetView().eye);
+	GetMesh()->SetWorldLocation(GetCapsuleComponent()->GetComponentLocation()
+		+ FVector(0.0, 0.0, -GetCapsuleComponent()->GetScaledCapsuleHalfHeight() + EyeDrop * 100.0) + Smoothing);
 }
 
 void ARunlineRunner::EndPlay(const EEndPlayReason::Type Reason)
