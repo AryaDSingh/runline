@@ -53,10 +53,10 @@ index 5efc4e5..b7eb74b 100644
  mod rooftops_tests;
 diff --git a/crates/faith_move/src/runline_scenarios.rs b/crates/faith_move/src/runline_scenarios.rs
 new file mode 100644
-index 0000000..c712ce8
+index 0000000..7414654
 --- /dev/null
 +++ b/crates/faith_move/src/runline_scenarios.rs
-@@ -0,0 +1,140 @@
+@@ -0,0 +1,388 @@
 +//! (Runline trace patch) Scenarios faith-runner's own tests don't cover, recorded only so
 +//! RunlineCore's replays can check them: the jump buffer (jump pressed in the air just before
 +//! touchdown) and the walk-off coyote jump (jump pressed just after running off a ledge). They
@@ -197,6 +197,254 @@ index 0000000..c712ce8
 +fn roll_press_k41() { roll_press(41) }
 +#[test]
 +fn roll_press_k42() { roll_press(42) }
++
++// ---------------------------------------------------------------- coverage batch
++// Branches no faith-runner test reaches (from the M1d review's mutation run). Each scenario only
++// records what faith_move does; the replay checks the C++ does the same.
++
++const FACE_PX: f32 = -std::f32::consts::FRAC_PI_2; // yaw facing +x
++
++fn drive(w: &BoxWorld, mut c: Controller, frames: usize, mut f: impl FnMut(usize, &Controller) -> Input) {
++    for i in 0..frames {
++        let inp = f(i, &c);
++        c.step(DT, &inp, w);
++    }
++}
++
++fn on_ground(p: Vec3, yaw: f32) -> Controller {
++    let mut c = Controller::new(Tuning::default(), p, yaw);
++    c.state = State::Ground;
++    c
++}
++
++fn fwd_in() -> Input {
++    Input { move_axis: Vec2::new(0.0, 1.0), ..Default::default() }
++}
++
++/// Running at a wall of height `h` (face z = -2) 30 degrees off parallel, jumping 0.5 m before
++/// it. Around 1.97 m the wall is too low to wallrun along and she vaults it instead.
++fn wall_of_height(h: f32) {
++    let mut w = floor();
++    w.add(Aabb::new(Vec3::new(-30.0, 0.0, -3.0), Vec3::new(30.0, h, -2.0)));
++    let a = 30f32.to_radians();
++    let fwd = Vec3::new(a.cos(), 0.0, -a.sin());
++    let start = Vec3::new(0.0, 0.0, -1.7) - fwd * 8.0;
++    let mut jumped = false;
++    drive(&w, on_ground(start, (-fwd.x).atan2(-fwd.z)), 150, |_, c| {
++        let press = c.feet.z < -1.5 && !jumped;
++        jumped |= press;
++        Input { jump_pressed: press, jump_held: press, ..fwd_in() }
++    });
++}
++#[test]
++fn wall_height_196() { wall_of_height(1.96) }
++#[test]
++fn wall_height_198() { wall_of_height(1.98) }
++#[test]
++fn wall_approach_56_5() { wall_approach(56.5) }
++#[test]
++fn wall_approach_57_5() { wall_approach(57.5) }
++
++/// A wallrun along the wall at z = -2, then `after` frames in, something else happens.
++fn wallrun_then(after: usize, mut then: impl FnMut(&mut Input)) {
++    let w = wall_world();
++    let a = 25f32.to_radians();
++    let fwd = Vec3::new(a.cos(), 0.0, -a.sin());
++    let start = Vec3::new(0.0, 0.0, -1.7) - fwd * 8.0;
++    let (mut jumped, mut on) = (false, 0usize);
++    drive(&w, on_ground(start, (-fwd.x).atan2(-fwd.z)), 200, |_, c| {
++        let press = c.feet.z < -0.8 && !jumped;
++        jumped |= press;
++        let mut i = Input { jump_pressed: press, jump_held: press, ..fwd_in() };
++        if matches!(c.state, State::WallRun { .. }) {
++            on += 1;
++        }
++        if on >= after {
++            then(&mut i);
++        }
++        i
++    });
++}
++#[test]
++fn wallrun_crouch_release() { wallrun_then(20, |i| { i.crouch_pressed = true; i.crouch_held = true; }) }
++#[test]
++fn wallrun_pull_back() { wallrun_then(20, |i| i.move_axis = Vec2::new(0.0, -1.0)) }
++#[test]
++fn wallrun_ride_out() { wallrun_then(10_000, |_| {}) }
++#[test]
++fn wallrun_dodge_late() { wallrun_then(30, |i| { i.move_axis = Vec2::new(-1.0, 1.0); i.jump_pressed = true; i.jump_held = true; }) }
++
++/// A corridor (walls at z = -2 and z = +2): jump from one wallrun to the other, again and again.
++#[test]
++fn wallrun_corridor_chain() {
++    let mut w = wall_world();
++    w.add(Aabb::new(Vec3::new(-30.0, 0.0, 2.0), Vec3::new(30.0, 10.0, 3.0)));
++    let a = 25f32.to_radians();
++    let fwd = Vec3::new(a.cos(), 0.0, -a.sin());
++    let start = Vec3::new(-6.0, 0.0, 0.0);
++    let mut jumped = false;
++    let mut last_jump = 0usize;
++    drive(&w, on_ground(start, (-fwd.x).atan2(-fwd.z)), 300, |f, c| {
++        let mut press = c.feet.z < -0.8 && !jumped;
++        jumped |= press;
++        if let State::WallRun { t, .. } = c.state {
++            if t > 0.25 && f > last_jump + 20 {
++                press = true;
++                last_jump = f;
++            }
++        }
++        Input { jump_pressed: press, jump_held: press, ..fwd_in() }
++    });
++}
++
++/// Falling at the wall from `y` with the floor at 0: ground just under the run stops a wallrun.
++fn falling_entry(y: f32) {
++    let w = wall_world();
++    let a = 25f32.to_radians();
++    let fwd = Vec3::new(a.cos(), 0.0, -a.sin());
++    let mut c = Controller::new(Tuning::default(), Vec3::new(-2.0, y, -1.2), (-fwd.x).atan2(-fwd.z));
++    c.state = State::Air;
++    c.vel = fwd * 6.0 - Vec3::Y * 1.0;
++    drive(&w, c, 90, |_, _| fwd_in());
++}
++#[test]
++fn wallrun_falling_entry_low() { falling_entry(0.6) }
++#[test]
++fn wallrun_falling_entry_high() { falling_entry(4.0) }
++
++/// Hanging from the 3 m ledge of faith-runner's `hanging()` (wall face z = -3).
++fn hang_then(frames: usize, extra: Option<Aabb>, f: impl FnMut(usize, &Controller) -> Input) {
++    let mut w = floor();
++    w.add(Aabb::new(Vec3::new(-2.0, 0.0, -5.0), Vec3::new(2.0, 3.0, -3.0)));
++    if let Some(b) = extra {
++        w.add(b);
++    }
++    let tu = Tuning::default();
++    let mut c = Controller::new(Tuning::default(), Vec3::ZERO, 0.0);
++    c.feet = Vec3::new(0.0, 3.0 - tu.hang_hands_above_feet, -3.0 + tu.half_width + 0.001);
++    c.state = State::LedgeHang { normal: Vec3::Z, ledge_y: 3.0, turned: false };
++    drive(&w, c, frames, f);
++}
++#[test]
++fn hang_turned_kick() {
++    hang_then(120, None, |f, _| Input {
++        look: Vec2::new(if f == 50 { 2.2 } else { 0.0 }, 0.0),
++        jump_pressed: f == 60,
++        jump_held: f == 60,
++        ..Default::default()
++    })
++}
++#[test]
++fn hang_crouch_drop_then_jump() {
++    hang_then(90, None, |f, _| Input { crouch_pressed: f == 50, crouch_held: f == 50, jump_pressed: f == 53, jump_held: f == 53, ..Default::default() })
++}
++#[test]
++fn hang_pullup_forward_only() { hang_then(150, None, |f, _| if f > 45 { fwd_in() } else { Input::default() }) }
++#[test]
++fn hang_pullup_low_ceiling() {
++    hang_then(150, Some(Aabb::new(Vec3::new(-2.0, 4.0, -5.0), Vec3::new(2.0, 5.0, -3.6))), |f, _| if f > 45 { fwd_in() } else { Input::default() })
++}
++#[test]
++fn hang_shimmy_facing_away() {
++    hang_then(200, None, |f, _| Input { look: Vec2::new(if f == 10 { 1.8 } else { 0.0 }, 0.0), move_axis: Vec2::new(1.0, 0.0), ..Default::default() })
++}
++
++/// Sprinting along +x and sliding at frame 90 (on a platform ending at x = `edge`), with `during` input.
++fn slide_with(edge: f32, mut during: impl FnMut(&mut Input)) {
++    let mut w = BoxWorld::default();
++    w.add(Aabb::new(Vec3::new(-50.0, -1.0, -50.0), Vec3::new(edge, 0.0, 50.0)));
++    w.add(Aabb::new(Vec3::new(-50.0, -6.0, -50.0), Vec3::new(50.0, -5.0, 50.0)));
++    drive(&w, on_ground(Vec3::new(-20.0, 0.0, 0.0), FACE_PX), 200, |f, _| {
++        let mut i = fwd_in();
++        if f >= 90 {
++            i.crouch_pressed = f == 90;
++            i.crouch_held = true;
++            if f >= 95 {
++                during(&mut i);
++            }
++        }
++        i
++    });
++}
++#[test]
++fn slide_pull_back() { slide_with(50.0, |i| i.move_axis = Vec2::new(0.0, -1.0)) }
++#[test]
++fn slide_off_a_ledge() { slide_with(-11.0, |_| {}) }
++#[test]
++fn slide_steer_left() { slide_with(50.0, |i| i.move_axis = Vec2::new(-1.0, 0.0)) }
++
++/// Dropping 3 m onto a 2 m platform while moving +x, crouch pressed in time: the roll carries her
++/// off its far edge.
++#[test]
++fn roll_off_an_edge() {
++    let mut w = BoxWorld::default();
++    w.add(Aabb::new(Vec3::new(-1.0, -1.0, -5.0), Vec3::new(1.0, 0.0, 5.0)));
++    w.add(Aabb::new(Vec3::new(-50.0, -8.0, -50.0), Vec3::new(50.0, -7.0, 50.0)));
++    let mut c = Controller::new(Tuning::default(), Vec3::new(-2.0, 3.0, 0.0), FACE_PX);
++    c.state = State::Air;
++    c.vel = Vec3::new(4.0, 0.0, 0.0);
++    drive(&w, c, 120, |f, _| Input { crouch_pressed: f == 30, crouch_held: f >= 30 && f < 34, ..Default::default() });
++}
++
++/// Two crouch presses on a 6 m drop: a second press less than 0.6 s after the first doesn't re-arm
++/// the roll (TdPawn.Tick's RollTriggerTime); one later than that does.
++fn roll_two_presses(a: usize, b: usize) {
++    let w = floor();
++    let c = Controller::new(Tuning::default(), Vec3::new(0.0, 6.0, 0.0), 0.0);
++    drive(&w, c, 90, |f, _| Input { crouch_pressed: f == a || f == b, crouch_held: f == a || f == b, ..Default::default() });
++}
++#[test]
++fn roll_retrigger_too_soon() { roll_two_presses(10, 42) }
++#[test]
++fn roll_retrigger_in_time() { roll_two_presses(2, 42) }
++
++/// Running at a rail of height `h` (x = 3..3.2) on a platform that ends at the rail, so whatever's
++/// past it is a drop (`drop` true) or level floor; jump pressed `at` metres before it.
++fn vault_at(h: f32, drop: bool, at: f32, axis: f32) {
++    let mut w = BoxWorld::default();
++    w.add(Aabb::new(Vec3::new(-50.0, -1.0, -50.0), Vec3::new(3.2, 0.0, 50.0)));
++    if drop {
++        w.add(Aabb::new(Vec3::new(3.2, -5.0, -50.0), Vec3::new(50.0, -4.0, 50.0)));
++    } else {
++        w.add(Aabb::new(Vec3::new(3.2, -1.0, -50.0), Vec3::new(50.0, 0.0, 50.0)));
++    }
++    w.add(Aabb::new(Vec3::new(3.0, 0.0, -5.0), Vec3::new(3.2, h, 5.0)));
++    let mut jumped = false;
++    drive(&w, on_ground(Vec3::new(-8.0, 0.0, 0.0), FACE_PX), 180, |_, c| {
++        let press = c.feet.x > 3.0 - at && !jumped;
++        jumped |= press;
++        Input { move_axis: Vec2::new(0.0, axis), jump_pressed: press, jump_held: press, ..Default::default() }
++    });
++}
++#[test]
++fn vault_falling_end() { vault_at(1.0, true, 1.4, 1.0) }
++#[test]
++fn vault_over_high_rising() { vault_at(1.6, false, 0.9, 1.0) }
++#[test]
++fn vault_soft_stick() { vault_at(1.0, false, 1.4, 0.75) }
++
++/// Springboard set-up (step 64 cm at x = 0..1.12, block of height `block` behind it), sprinting in
++/// with jump held, with an optional extra box.
++fn springboard_with(block: f32, extra: Option<Aabb>) {
++    let mut w = floor();
++    w.add(Aabb::new(Vec3::new(0.0, 0.0, -5.0), Vec3::new(1.12, 0.64, 5.0)));
++    w.add(Aabb::new(Vec3::new(1.12, 0.0, -5.0), Vec3::new(4.0, block, 5.0)));
++    if let Some(b) = extra {
++        w.add(b);
++    }
++    drive(&w, on_ground(Vec3::new(-15.0, 0.0, 0.0), FACE_PX), 240, |_, _| Input { jump_held: true, ..fwd_in() });
++}
++#[test]
++fn springboard_block_too_tall() { springboard_with(1.7, None) }
++#[test]
++fn springboard_block_too_short() { springboard_with(0.7, None) }
++#[test]
++fn springboard_run_in_blocked() {
++    // A bar at chest height across the run-in, above what the step probe sees: she commits, then runs into it.
++    springboard_with(1.2, Some(Aabb::new(Vec3::new(-1.05, 0.9, -5.0), Vec3::new(-0.95, 1.0, 5.0))))
++}
++
++
 diff --git a/crates/faith_move/src/trace.rs b/crates/faith_move/src/trace.rs
 new file mode 100644
 index 0000000..16191f7
