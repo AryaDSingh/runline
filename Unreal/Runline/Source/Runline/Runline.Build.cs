@@ -40,6 +40,9 @@ public class Runline : ModuleRules
 		PublicIncludePaths.Add(Path.Combine(RepoRoot, "RunlineCore", "include"));
 		PublicAdditionalLibraries.Add(Path.Combine(RepoRoot, "build", "RunlineCore-ue", "Release", "RunlineCore.lib"));
 		bEnableExceptions = true;
+		// Game targets default to /fp:fast (Editor ones to /fp:precise); the core's inline maths and
+		// RunlineUnits must round the same way in a packaged game as in the tests.
+		FPSemantics = FPSemanticsMode.Precise;
 		PublicIncludePaths.Add("Runline/Runner");
 		// The adapter tests replay the core's traces and goldens.
 		PrivateIncludePaths.Add(Path.Combine(RepoRoot, "RunlineCore", "tests"));

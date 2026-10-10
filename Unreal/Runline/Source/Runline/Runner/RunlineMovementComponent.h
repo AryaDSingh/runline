@@ -47,7 +47,8 @@ public:
 
 	/// The eye to render this frame (cm): between the last two steps.
 	FVector GetRenderEye() const;
-	/// The view to render this frame: the stepped view plus the look not yet stepped.
+	/// The view to render this frame: between the last two steps, plus the look not yet stepped
+	/// that the next step will take.
 	FRotator GetRenderRotation() const;
 
 	const runline::Controller& Core() const { return *Controller; }
@@ -69,6 +70,8 @@ private:
 	runline::Input TakeInput();
 	void StepOnce();
 	void SyncCapsule();
+	/// Start interpolating from where the core is now (after a respawn or teleport: no sweep).
+	void SnapView();
 	const runline::World& CoreWorld();
 
 	std::unique_ptr<runline::Controller> Controller;
@@ -77,7 +80,11 @@ private:
 	int64 Steps = 0;
 	int32 NotPorted = 0;
 	TSet<FString> NotPortedSeen;
+	// The view at the start of the last step, with the look that step took: the render view
+	// moves from here to the stepped view, so look is never delayed and core turns are smooth.
 	runline::Vec3 PrevEye{};
+	float PrevYaw = 0.0f;
+	float PrevPitch = 0.0f;
 
 	FVector2D Move = FVector2D::ZeroVector;
 	FVector2D PendingLook = FVector2D::ZeroVector;

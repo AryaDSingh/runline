@@ -134,7 +134,7 @@ void ARunlineCourse::AddLights()
 {
 	UWorld* W = GetWorld();
 	ADirectionalLight* Sun = W->SpawnActor<ADirectionalLight>(FVector::ZeroVector, FRotator(-40.0, 20.0, 0.0));
-	if (Sun) Sun->GetComponent()->SetMobility(EComponentMobility::Movable);
+	if (Sun) Sun->GetLightComponent()->SetMobility(EComponentMobility::Movable);
 	if (ASkyLight* Sky = W->SpawnActor<ASkyLight>())
 	{
 		Sky->GetLightComponent()->SetMobility(EComponentMobility::Movable);

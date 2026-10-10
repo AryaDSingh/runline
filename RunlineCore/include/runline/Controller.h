@@ -252,6 +252,11 @@ public:
     /// Where the feet would be with the legs straight: feet minus the coil lift while tucked.
     Vec3 Root() const;
     bool IsCoiled() const { return coiled_; }
+    /// Whether the next step takes the yaw part of `Input::look` (Step drops it during a 180 turn or a
+    /// hard landing); a host showing unstepped look shows only what will be taken.
+    bool TakesYawLook() const { return !turn_ && !std::holds_alternative<Stunned>(state); }
+    /// Whether the next step takes the pitch part (Step drops it only during a hard landing).
+    bool TakesPitchLook() const { return !std::holds_alternative<Stunned>(state); }
 
 private:
     /// The replay tests read the bookkeeping below to compare it with faith_move's (trace `hid`).

@@ -74,3 +74,30 @@ TEST_CASE("turning on auto step-up before it's ported fails loudly, not silently
     fwd.moveAxis = {0.0f, 1.0f};
     CHECK_THROWS_AS([&] { for (int i = 0; i < 120; ++i) c.Step(1.0f / 60.0f, fwd, w); }(), NotPorted);
 }
+
+TEST_CASE("which look the next step will take: none of it stunned, no yaw while turning") {
+    // The host draws look the core hasn't stepped yet; it must not draw look the core will drop.
+    const BoxWorld w = Floor();
+    Controller c(Tuning{}, {0, 0, 0}, 0.0f);
+    c.Step(1.0f / 60.0f, Input{}, w);
+    REQUIRE(std::holds_alternative<Ground>(c.state));
+    CHECK(c.TakesYawLook());
+    CHECK(c.TakesPitchLook());
+    Input turn;
+    turn.turnPressed = true;
+    c.Step(1.0f / 60.0f, turn, w);
+    CHECK_FALSE(c.TakesYawLook());   // the 180 turn owns the yaw (Step: if (!turn_) yaw += look.x)
+    CHECK(c.TakesPitchLook());
+    // Mid-turn, a yaw look really is dropped and a pitch look really is taken.
+    const float pitch = c.pitch;
+    Input look;
+    look.look = {0.3f, 0.2f};
+    Controller still = c;
+    still.Step(1.0f / 60.0f, Input{}, w);
+    c.Step(1.0f / 60.0f, look, w);
+    CHECK(c.yaw == still.yaw);
+    CHECK(c.pitch == FClamp(pitch + 0.2f, -1.5f, 1.5f));
+    c.state = Stunned{0.0f};
+    CHECK_FALSE(c.TakesYawLook());
+    CHECK_FALSE(c.TakesPitchLook());
+}

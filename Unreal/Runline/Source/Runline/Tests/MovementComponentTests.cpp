@@ -201,4 +201,59 @@ bool FRunlineMovementOnBack::RunTest(const FString&)
 	return true;
 }
 
+// Review Important 1: when the core respawns her itself (falling past the kill plane), the camera
+// starts at the respawn point; it must not sweep there from where she died.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineMovementDeathCut, "Runline.Movement.RespawnCutsTheCamera",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineMovementDeathCut::RunTest(const FString&)
+{
+	FRunnerWorld RW;
+	RW.M().Advance(10 * Step);
+	RW.M().MutableCore().feet = {0.0f, -39.99f, 0.0f};   // just above the kill plane (y -40)
+	RW.M().MutableCore().state = runline::Air{};
+	RW.M().MutableCore().vel = {0.0f, -10.0f, 0.0f};
+	RW.M().Advance(Step);
+	TestEqual(TEXT("the core respawned her"), RW.Count(runline::EventKind::Death), 1);
+	RW.M().Advance(0.5f * Step);   // half way to the next step
+	const FVector Want = RunlineUnits::ToUnrealPosition(RW.M().Core().GetView().eye);
+	TestTrue(TEXT("the camera is at the respawn, not half way from the street"), RW.M().GetRenderEye().Equals(Want, 1e-3));
+	return true;
+}
+
+// Review Important 2: turns the core makes (the 180) are drawn smoothly between steps, and look
+// the core will drop (mid-turn yaw) isn't drawn; look it will take is drawn at once.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineMovementViewBetweenSteps, "Runline.Movement.ViewBetweenSteps",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineMovementViewBetweenSteps::RunTest(const FString&)
+{
+	FRunnerWorld RW;
+	RW.M().Advance(10 * Step);
+	// Look it will take shows at once, before any step.
+	const double Yaw0 = RW.M().GetRenderRotation().Yaw;
+	RW.M().AddLook(FVector2D(0.1, 0.0));
+	TestEqual(TEXT("a mouse turn shows at once"), RW.M().GetRenderRotation().Yaw, Yaw0 - FMath::RadiansToDegrees(0.1), 1e-3);
+	RW.M().Advance(Step);
+	// The 180 at 144 fps: the view moves every frame, never holding still between steps.
+	RW.M().PressTurn();
+	TArray<double> Yaws;
+	for (int32 F = 0; F < 60; ++F)
+	{
+		RW.M().Advance(1.0f / 144.0f);
+		Yaws.Add(RW.M().GetRenderRotation().Yaw);
+	}
+	int32 Held = 0;
+	// While the turn runs (turn180Time, 0.2 s), give or take a step at each end.
+	const int32 TurnFrames = FMath::FloorToInt(RW.M().Core().tuning.turn180Time * 144.0f);
+	for (int32 F = 2; F < TurnFrames - 2; ++F) Held += FMath::IsNearlyEqual(Yaws[F], Yaws[F - 1], 1e-6) ? 1 : 0;
+	TestEqual(TEXT("the turn moves every frame (no stair steps)"), Held, 0);
+	// Mid-turn the core drops yaw look: the view mustn't show it and then snap back.
+	RW.M().PressTurn();
+	RW.M().Advance(Step);
+	TestFalse(TEXT("turning"), RW.M().Core().TakesYawLook());
+	const double Before = RW.M().GetRenderRotation().Yaw;
+	RW.M().AddLook(FVector2D(0.5, 0.0));
+	TestEqual(TEXT("dropped look isn't drawn"), RW.M().GetRenderRotation().Yaw, Before, 1e-6);
+	return true;
+}
+
 #endif

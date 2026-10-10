@@ -9,7 +9,15 @@ DEFINE_LOG_CATEGORY_STATIC(LogRunlineMovement, Log, All);
 URunlineMovementComponent::URunlineMovementComponent()
 	: Controller(std::make_unique<runline::Controller>(runline::Tuning{}, runline::Vec3{}, 0.0f))
 {
-	PrevEye = Controller->GetView().eye;
+	SnapView();
+}
+
+void URunlineMovementComponent::SnapView()
+{
+	const runline::View V = Controller->GetView();
+	PrevEye = V.eye;
+	PrevYaw = V.yaw;
+	PrevPitch = V.pitch;
 }
 
 URunlineMovementComponent::~URunlineMovementComponent() = default;
@@ -50,7 +58,7 @@ void URunlineMovementComponent::Respawn()
 {
 	Controller->Respawn();
 	PendingLook = FVector2D::ZeroVector;
-	PrevEye = Controller->GetView().eye;
+	SnapView();
 	SyncCapsule();
 }
 
@@ -82,10 +90,16 @@ runline::Input URunlineMovementComponent::TakeInput()
 void URunlineMovementComponent::StepOnce()
 {
 	const runline::Input In = TakeInput();
-	PrevEye = Controller->GetView().eye;
+	const runline::View Before = Controller->GetView();
+	PrevEye = Before.eye;
+	PrevYaw = Before.yaw + (Controller->TakesYawLook() ? In.look.x : 0.0f);
+	PrevPitch = Controller->TakesPitchLook() ? FMath::Clamp(Before.pitch + In.look.y, -1.5f, 1.5f) : Before.pitch;
 	try
 	{
 		Controller->Step(StepSeconds, In, CoreWorld());
+		// The core respawned her itself (kill plane, lethal fall): cut, don't sweep.
+		for (const runline::Event& E : Controller->events)
+			if (E.kind == runline::EventKind::Death) SnapView();
 	}
 	catch (const runline::NotPorted& E)
 	{
@@ -97,7 +111,7 @@ void URunlineMovementComponent::StepOnce()
 			UE_LOG(LogRunlineMovement, Error, TEXT("RunlineCore: %s; respawning"), *What);
 		}
 		Controller->Respawn();
-		PrevEye = Controller->GetView().eye;
+		SnapView();
 	}
 	++Steps;
 	if (OnStep) OnStep(*Controller, In);
@@ -142,6 +156,9 @@ FVector URunlineMovementComponent::GetRenderEye() const
 
 FRotator URunlineMovementComponent::GetRenderRotation() const
 {
+	const float Alpha = FMath::Clamp(Accumulator / StepSeconds, 0.0f, 1.0f);
 	const runline::View V = Controller->GetView();
-	return RunlineUnits::ToUnrealRotator(V.yaw + float(PendingLook.X), FMath::Clamp(V.pitch + float(PendingLook.Y), -1.5f, 1.5f), V.roll);
+	const float Yaw = FMath::Lerp(PrevYaw, V.yaw, Alpha) + (Controller->TakesYawLook() ? float(PendingLook.X) : 0.0f);
+	const float Pitch = FMath::Lerp(PrevPitch, V.pitch, Alpha) + (Controller->TakesPitchLook() ? float(PendingLook.Y) : 0.0f);
+	return RunlineUnits::ToUnrealRotator(Yaw, FMath::Clamp(Pitch, -1.5f, 1.5f), V.roll);
 }
