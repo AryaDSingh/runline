@@ -101,6 +101,86 @@ std::string DiffExt(const trace::Ext& want, const Controller& c) {
     return d.str();
 }
 
+} // namespace
+
+namespace runline {
+/// The replay's view of the controller's private bookkeeping (friend of Controller).
+struct ReplayAccess {
+    static std::string Diff(const trace::Hid& want, const Controller& c);
+};
+} // namespace runline
+
+namespace {
+
+const char* TakeoffName(Takeoff t) {
+    switch (t) {
+        case Takeoff::Other: return "Other";
+        case Takeoff::Jump: return "Jump";
+        case Takeoff::WallJump: return "WallJump";
+    }
+    return "?";
+}
+
+const char* TurnKindName(TurnKind k) {
+    switch (k) {
+        case TurnKind::Run: return "Run";
+        case TurnKind::Stand: return "Stand";
+        case TurnKind::Air: return "Air";
+        case TurnKind::WallClimb: return "WallClimb";
+        case TurnKind::Swing: return "Swing";
+    }
+    return "?";
+}
+
+} // namespace
+
+/// First difference in the bookkeeping (trace v4 `hid`), or "".
+std::string runline::ReplayAccess::Diff(const trace::Hid& want, const Controller& c) {
+    std::ostringstream d;
+    const auto cmp = [&](const char* f, float w, float g) { if (d.str().empty() && !Same(w, g)) d << f << ": want " << Num(w) << ", got " << Num(g); };
+    const auto flag = [&](const char* f, bool w, bool g) { if (d.str().empty() && w != g) d << f << ": want " << w << ", got " << g; };
+    const auto text = [&](const char* f, const std::string& w, const std::string& g) { if (d.str().empty() && w != g) d << f << ": want " << w << ", got " << g; };
+    cmp("air_time", want.airTime, c.airTime_);
+    flag("jumped_since_ground", want.jumpedSinceGround, c.jumpedSinceGround_);
+    cmp("jump_buffer", want.jumpBuffer, c.jumpBuffer_);
+    cmp("roll_trigger_age", want.rollTriggerAge, c.rollTriggerAge_);
+    text("takeoff", want.takeoff, TakeoffName(c.takeoff_));
+    cmp("pre_jump_momentum", want.preJumpMomentum, c.preJumpMomentum_);
+    cmp("last_jump_at.x", want.lastJumpAt.x, c.lastJumpAt_.x);
+    cmp("last_jump_at.y", want.lastJumpAt.y, c.lastJumpAt_.y);
+    cmp("last_jump_at.z", want.lastJumpAt.z, c.lastJumpAt_.z);
+    if (d.str().empty() && want.chainWallruns != c.chainWallruns_) d << "chain_wallruns: want " << want.chainWallruns << ", got " << c.chainWallruns_;
+    flag("climbed_this_air", want.climbedThisAir, c.climbedThisAir_);
+    flag("last_wall_normal set", want.lastWallNormal.has_value(), c.lastWallNormal_.has_value());
+    if (want.lastWallNormal && c.lastWallNormal_) {
+        cmp("last_wall_normal.x", want.lastWallNormal->x, c.lastWallNormal_->x);
+        cmp("last_wall_normal.y", want.lastWallNormal->y, c.lastWallNormal_->y);
+        cmp("last_wall_normal.z", want.lastWallNormal->z, c.lastWallNormal_->z);
+    }
+    cmp("regrab_cooldown", want.regrabCooldown, c.regrabCooldown_);
+    flag("turn set", want.turn.has_value(), c.turn_.has_value());
+    if (want.turn && c.turn_) {
+        cmp("turn.from", want.turn->from, c.turn_->from);
+        cmp("turn.t", want.turn->t, c.turn_->t);
+        text("turn.kind", want.turn->kind, TurnKindName(c.turn_->kind));
+    }
+    cmp("yaw_rate", want.yawRate, c.yawRate_);
+    cmp("frame_turn", want.frameTurn, c.frameTurn_);
+    cmp("eye_height", want.eyeHeight, c.eyeHeight_);
+    cmp("fall_peak", want.fallPeak, c.fallPeak_);
+    flag("coiled", want.coiled, c.coiled_);
+    cmp("low_grav", want.lowGrav, c.lowGrav_);
+    flag("turned_in_air", want.turnedInAir, c.turnedInAir);
+    cmp("slide_yaw", want.slideYaw, c.slideYaw);
+    flag("soft_brace", want.softBrace, c.softBrace);
+    flag("wallrun_wall_above", want.wallrunWallAbove, c.wallrunWallAbove);
+    cmp("grab_speed", want.grabSpeed, c.grabSpeed);
+    cmp("hang_time", want.hangTime, c.hangTime);
+    return d.str();
+}
+
+namespace {
+
 /// Replays a trace; returns "" if every frame matches, else where and how it first diverged.
 std::string Replay(const trace::Trace& t) {
     if (!t.defaultTuning) return "uses non-default tuning (not replayable yet)";
@@ -128,6 +208,7 @@ std::string Replay(const trace::Trace& t) {
         }
         std::string d = Diff(f.out, c, f.events);
         if (d.empty() && f.ext) d = DiffExt(*f.ext, c);
+        if (d.empty() && f.hid) d = ReplayAccess::Diff(*f.hid, c);
         if (!d.empty()) return "frame " + std::to_string(i) + " (of " + std::to_string(t.frames.size()) + "): " + d;
     }
     return "";
@@ -147,9 +228,12 @@ TEST_CASE("replay: every committed trace matches faith_move frame by frame") {
     CHECK(failures.empty());
 }
 
-TEST_CASE("replay: every recorded frame carries the host-facing outputs (trace v3)") {
+TEST_CASE("replay: every recorded frame carries the host-facing outputs and the bookkeeping (trace v4)") {
     for (const auto& n : trace::All()) {
         CAPTURE(n);
-        for (const auto& f : trace::Load(n).frames) REQUIRE(f.ext.has_value());
+        for (const auto& f : trace::Load(n).frames) {
+            REQUIRE(f.ext.has_value());
+            REQUIRE(f.hid.has_value());
+        }
     }
 }

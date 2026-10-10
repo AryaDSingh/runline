@@ -1,5 +1,5 @@
 diff --git a/crates/faith_move/src/controller.rs b/crates/faith_move/src/controller.rs
-index ace84a0..bff293f 100644
+index ace84a0..09af038 100644
 --- a/crates/faith_move/src/controller.rs
 +++ b/crates/faith_move/src/controller.rs
 @@ -549,6 +549,9 @@ pub struct Controller {
@@ -12,7 +12,56 @@ index ace84a0..bff293f 100644
  }
  
  const SUBSTEP: f32 = 1.0 / 120.0;
-@@ -637,6 +640,8 @@ impl Controller {
+@@ -576,6 +579,48 @@ fn smoothstep(x: f32) -> f32 {
+ }
+ 
+ impl Controller {
++    /// Runline trace (v4 `hid` record): the bookkeeping the snapshot doesn't show, so a replay
++    /// catches a wrong one on the frame it goes wrong rather than when it next matters.
++    pub(crate) fn trace_hidden(&self) -> String {
++        let b = |x: bool| if x { 1 } else { 0 };
++        let v = |p: Vec3| format!("{},{},{}", p.x, p.y, p.z);
++        let wall = match self.last_wall_normal {
++            Some(n) => format!("1,{}", v(n)),
++            None => "0,,,".to_string(),
++        };
++        let turn = match self.turn {
++            Some(t) => format!("1,{},{},{:?}", t.from, t.t, t.kind),
++            None => "0,,,".to_string(),
++        };
++        format!(
++            "hid,{},{},{},{},{:?},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
++            self.air_time,
++            b(self.jumped_since_ground),
++            self.jump_buffer,
++            self.roll_trigger_age,
++            self.takeoff,
++            self.pre_jump_momentum,
++            v(self.last_jump_at),
++            self.chain_wallruns,
++            b(self.climbed_this_air),
++            wall,
++            self.regrab_cooldown,
++            turn,
++            self.yaw_rate,
++            self.frame_turn,
++            self.eye_height,
++            self.fall_peak,
++            b(self.coiled),
++            self.low_grav,
++            b(self.turned_in_air),
++            self.slide_yaw,
++            b(self.soft_brace),
++            b(self.wallrun_wall_above),
++            self.grab_speed,
++            self.hang_time,
++        )
++    }
++
+     pub fn new(tuning: Tuning, spawn: Vec3, spawn_yaw: f32) -> Self {
+         let eye = tuning.stand_height - tuning.eye_from_top;
+         Self {
+@@ -637,6 +682,8 @@ impl Controller {
              vertigo_zoom: false,
              springboard: None,
              hang_time: 0.0,
@@ -21,7 +70,7 @@ index ace84a0..bff293f 100644
              shimmy: None,
              turned_in_air: false,
              slide_yaw: 0.0,
-@@ -716,6 +721,14 @@ impl Controller {
+@@ -716,6 +763,14 @@ impl Controller {
  
      /// Advance by `dt` seconds.
      pub fn step(&mut self, dt: f32, input: &Input, world: &dyn World) {
@@ -447,7 +496,7 @@ index 0000000..7414654
 +
 diff --git a/crates/faith_move/src/trace.rs b/crates/faith_move/src/trace.rs
 new file mode 100644
-index 0000000..16191f7
+index 0000000..4407e09
 --- /dev/null
 +++ b/crates/faith_move/src/trace.rs
 @@ -0,0 +1,122 @@
@@ -500,7 +549,7 @@ index 0000000..16191f7
 +        });
 +        let default = format!("{:?}", c.tuning) == format!("{:?}", Tuning::default());
 +        text += &format!(
-+            "trace,3\ntuning_default,{}\nspawn,{},{},{},{}\ninit,{}\nstate_debug,{:?}\n",
++            "trace,4\ntuning_default,{}\nspawn,{},{},{},{}\ninit,{}\nstate_debug,{:?}\n",
 +            b(default), c.spawn.x, c.spawn.y, c.spawn.z, c.spawn_yaw, snapshot(c), c.state
 +        );
 +    } else {
@@ -571,7 +620,7 @@ index 0000000..16191f7
 +        .collect();
 +    let now = snapshot(c);
 +    SEEN.with(|s| s.borrow_mut()[c.trace_id - 1].1 = now.clone());
-+    append(c.trace_id, &format!("out,{},{}\n{}", now, events.join(";"), ext(c)));
++    append(c.trace_id, &format!("out,{},{}\n{}{}", now, events.join(";"), ext(c), c.trace_hidden()));
 +}
 diff --git a/crates/faith_move/src/world.rs b/crates/faith_move/src/world.rs
 index d3c3984..1b7a845 100644

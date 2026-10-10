@@ -254,6 +254,9 @@ public:
     bool IsCoiled() const { return coiled_; }
 
 private:
+    /// The replay tests read the bookkeeping below to compare it with faith_move's (trace `hid`).
+    friend struct ReplayAccess;
+
     float airTime_ = 0.0f;
     bool jumpedSinceGround_ = false;
     float jumpBuffer_ = 0.0f;

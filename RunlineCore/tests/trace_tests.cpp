@@ -4,7 +4,7 @@ using namespace runline;
 
 TEST_CASE("Parse reads every record kind, empty events and fixture text with commas") {   // Review Focus 3
     std::istringstream in(
-        "trace,3\n"
+        "trace,4\n"
         "tuning_default,1\n"
         "spawn,0,1,0,0.25\n"
         "init,0,1,0,0,0,0,0,0,Air,0,0\n"
@@ -19,7 +19,8 @@ TEST_CASE("Parse reads every record kind, empty events and fixture text with com
         "set,0,0,0,0,0,0,1.5,-0.2,Ground,0,0\n"
         "in,0.016666668,0,0,0,0,0,0,0,0,0,0,0,0\n"
         "out,0,0,0,0,0,0,1.5,-0.2,Ground,0,0,Land;Jump\n"
-        "ext,0,1.66,0,-0.05,1,0.1,1,-0.2,0,,,,Land:3.5:0.6\n");
+        "ext,0,1.66,0,-0.05,1,0.1,1,-0.2,0,,,,Land:3.5:0.6\n"
+        "hid,0.5,1,0.1,inf,WallJump,6.5,1,2,3,2,1,1,0,0,0,0.25,1,0.5,0.25,Air,0.75,0.01,1.6,2.5,1,0,1,0.3,0,1,-4,0.2\n");
     const trace::Trace t = trace::Parse(in, "mini");
     CHECK(t.defaultTuning);
     CHECK(t.init.state == "Air");
@@ -57,17 +58,51 @@ TEST_CASE("Parse reads every record kind, empty events and fixture text with com
     REQUIRE(x.payloads.size() == 1);
     CHECK(x.payloads[0].first == "Land");
     CHECK(x.payloads[0].second == std::vector<float>{3.5f, 0.6f});
+    // The bookkeeping the snapshot doesn't show.
+    CHECK_FALSE(t.frames[0].hid.has_value());
+    REQUIRE(t.frames[1].hid.has_value());
+    const trace::Hid& h = *t.frames[1].hid;
+    CHECK(h.airTime == 0.5f);
+    CHECK(h.jumpedSinceGround);
+    CHECK(h.jumpBuffer == 0.1f);
+    CHECK(std::isinf(h.rollTriggerAge));
+    CHECK(h.takeoff == "WallJump");
+    CHECK(h.preJumpMomentum == 6.5f);
+    CHECK(h.lastJumpAt == Vec3{1, 2, 3});
+    CHECK(h.chainWallruns == 2u);
+    CHECK(h.climbedThisAir);
+    REQUIRE(h.lastWallNormal.has_value());
+    CHECK(*h.lastWallNormal == Vec3{0, 0, 0});
+    CHECK(h.regrabCooldown == 0.25f);
+    REQUIRE(h.turn.has_value());
+    CHECK(h.turn->from == 0.5f);
+    CHECK(h.turn->t == 0.25f);
+    CHECK(h.turn->kind == "Air");
+    CHECK(h.yawRate == 0.75f);
+    CHECK(h.frameTurn == 0.01f);
+    CHECK(h.eyeHeight == 1.6f);
+    CHECK(h.fallPeak == 2.5f);
+    CHECK(h.coiled);
+    CHECK(h.lowGrav == 0.0f);
+    CHECK(h.turnedInAir);
+    CHECK(h.slideYaw == 0.3f);
+    CHECK_FALSE(h.softBrace);
+    CHECK(h.wallrunWallAbove);
+    CHECK(h.grabSpeed == -4.0f);
+    CHECK(h.hangTime == 0.2f);
 }
 
 TEST_CASE("Parse rejects a file with no init, a frame with no output, an old version or a short record") {
-    std::istringstream noInit("trace,3\ntuning_default,1\nin,0.1,0,0,0,0,0,0,0,0,0,0,0,0\n");
+    std::istringstream noInit("trace,4\ntuning_default,1\nin,0.1,0,0,0,0,0,0,0,0,0,0,0,0\n");
     CHECK_THROWS(trace::Parse(noInit, "bad"));
-    std::istringstream noOut("trace,3\ntuning_default,1\nspawn,0,0,0,0\ninit,0,0,0,0,0,0,0,0,Air,0,0\nworld\nend_world\nin,0.1,0,0,0,0,0,0,0,0,0,0,0,0\n");
+    std::istringstream noOut("trace,4\ntuning_default,1\nspawn,0,0,0,0\ninit,0,0,0,0,0,0,0,0,Air,0,0\nworld\nend_world\nin,0.1,0,0,0,0,0,0,0,0,0,0,0,0\n");
     CHECK_THROWS(trace::Parse(noOut, "bad"));
-    std::istringstream v1("trace,2\ntuning_default,1\n");
-    CHECK_THROWS(trace::Parse(v1, "old"));   // older versions lack spawn/set (v1) or ext (v2) records
-    std::istringstream shortIn("trace,3\ntuning_default,1\nspawn,0,0,0,0\ninit,0,0,0,0,0,0,0,0,Air,0,0\nworld\nend_world\nin,0.1,0,0\n");
+    std::istringstream v1("trace,3\ntuning_default,1\n");
+    CHECK_THROWS(trace::Parse(v1, "old"));   // older versions lack spawn/set (v1), ext (v2) or hid (v3) records
+    std::istringstream shortIn("trace,4\ntuning_default,1\nspawn,0,0,0,0\ninit,0,0,0,0,0,0,0,0,Air,0,0\nworld\nend_world\nin,0.1,0,0\n");
     CHECK_THROWS(trace::Parse(shortIn, "short"));   // a truncated record throws instead of reading past the end
+    std::istringstream hidAlone("trace,4\ntuning_default,1\nspawn,0,0,0,0\ninit,0,0,0,0,0,0,0,0,Air,0,0\nworld\nend_world\nin,0.1,0,0,0,0,0,0,0,0,0,0,0,0\nout,0,0,0,0,0,0,0,0,Air,0,0,\nhid,0\n");
+    CHECK_THROWS(trace::Parse(hidAlone, "short"));   // hid must follow an ext record, and be whole
 }
 
 TEST_CASE("every committed trace loads, and was recorded from the golden reference commit and the committed patch") {

@@ -47,6 +47,30 @@ struct Ext {
     std::vector<std::pair<std::string, std::vector<float>>> payloads;
 };
 
+/// The controller's bookkeeping after a step (trace v4 `hid` record): fields the snapshot
+/// doesn't show, so a replay catches a wrong one on the frame it goes wrong.
+struct Hid {
+    float airTime = 0;
+    bool jumpedSinceGround = false;
+    float jumpBuffer = 0, rollTriggerAge = 0;
+    std::string takeoff;   // Rust Debug: Other / Jump / WallJump
+    float preJumpMomentum = 0;
+    runline::Vec3 lastJumpAt{};
+    unsigned chainWallruns = 0;
+    bool climbedThisAir = false;
+    std::optional<runline::Vec3> lastWallNormal;
+    float regrabCooldown = 0;
+    struct Turn { float from = 0, t = 0; std::string kind; };
+    std::optional<Turn> turn;
+    float yawRate = 0, frameTurn = 0, eyeHeight = 0, fallPeak = 0;
+    bool coiled = false;
+    float lowGrav = 0;
+    bool turnedInAir = false;
+    float slideYaw = 0;
+    bool softBrace = false, wallrunWallAbove = false;
+    float grabSpeed = 0, hangTime = 0;
+};
+
 struct Frame {
     size_t world = 0;   // index into Trace::worlds
     FrameInput in;
@@ -56,6 +80,7 @@ struct Frame {
     /// What a test set the controller to just before this step, if it changed it between steps.
     std::optional<Snapshot> set;
     std::optional<Ext> ext;
+    std::optional<Hid> hid;
 };
 
 struct Trace {
@@ -127,7 +152,7 @@ inline Trace Parse(std::istream& in, const std::string& name) {
         }
         const auto f = Split(line, ',');
         if (f[0] == "trace") {
-            if (f.size() < 2 || f[1] != "3") throw std::runtime_error(name + ": unsupported trace version (re-run make-traces.sh)");
+            if (f.size() < 2 || f[1] != "4") throw std::runtime_error(name + ": unsupported trace version (re-run make-traces.sh)");
         } else if (f[0] == "tuning_default") {
             Need(f, 2, name);
             t.defaultTuning = f[1] == "1";
@@ -154,6 +179,37 @@ inline Trace Parse(std::istream& in, const std::string& name) {
                 }
             }
             t.frames.back().ext = x;
+        } else if (f[0] == "hid") {
+            if (t.frames.empty() || !t.frames.back().ext || t.frames.back().hid) throw std::runtime_error(name + ": hid record not after an ext record");
+            Need(f, 33, name);
+            Hid h;
+            const auto num = [&](size_t k) { return std::stof(f[k]); };
+            const auto vec = [&](size_t k) { return runline::Vec3{num(k), num(k + 1), num(k + 2)}; };
+            h.airTime = num(1);
+            h.jumpedSinceGround = f[2] == "1";
+            h.jumpBuffer = num(3);
+            h.rollTriggerAge = num(4);
+            h.takeoff = f[5];
+            h.preJumpMomentum = num(6);
+            h.lastJumpAt = vec(7);
+            h.chainWallruns = static_cast<unsigned>(std::stoul(f[10]));
+            h.climbedThisAir = f[11] == "1";
+            if (f[12] == "1") h.lastWallNormal = vec(13);
+            h.regrabCooldown = num(16);
+            if (f[17] == "1") h.turn = Hid::Turn{num(18), num(19), f[20]};
+            h.yawRate = num(21);
+            h.frameTurn = num(22);
+            h.eyeHeight = num(23);
+            h.fallPeak = num(24);
+            h.coiled = f[25] == "1";
+            h.lowGrav = num(26);
+            h.turnedInAir = f[27] == "1";
+            h.slideYaw = num(28);
+            h.softBrace = f[29] == "1";
+            h.wallrunWallAbove = f[30] == "1";
+            h.grabSpeed = num(31);
+            h.hangTime = num(32);
+            t.frames.back().hid = h;
         } else if (f[0] == "set") {
             Need(f, 12, name);
             pendingSet = ParseSnapshot(f, 1);
