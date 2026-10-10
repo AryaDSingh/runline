@@ -3,12 +3,28 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
+namespace
+{
+	/// A settings object at the shipped defaults (a new one starts from the player's saved config).
+	URunlineSettings* Defaults()
+	{
+		URunlineSettings* S = NewObject<URunlineSettings>();
+		S->MouseSensitivity = 1.0f;
+		S->PadSensitivity = 1.0f;
+		S->bInvertMouseY = false;
+		S->bInvertPadY = false;
+		S->FieldOfView = 90.0f;
+		S->CameraMotion = 1.0f;
+		return S;
+	}
+}
+
 // Review Focus 1: a hand-edited or broken config loads as sane values.
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineSettingsClamp, "Runline.Settings.ClampsAndDefaults",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FRunlineSettingsClamp::RunTest(const FString&)
 {
-	URunlineSettings* S = NewObject<URunlineSettings>();
+	URunlineSettings* S = Defaults();
 	S->MouseSensitivity = 0.0f;
 	S->PadSensitivity = std::numeric_limits<float>::quiet_NaN();
 	S->FieldOfView = 500.0f;
@@ -33,7 +49,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineSettingsMouse, "Runline.Settings.MouseL
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FRunlineSettingsMouse::RunTest(const FString&)
 {
-	URunlineSettings* S = NewObject<URunlineSettings>();
+	URunlineSettings* S = Defaults();
 	const FVector2D L = S->MouseLook(FVector2D(10.0, 5.0));
 	TestEqual(TEXT("x: mouse right turns right (core yaw negative)"), L.X, -0.022, 1e-7);
 	TestEqual(TEXT("y: mouse up looks up"), L.Y, 0.011, 1e-7);
@@ -50,7 +66,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineSettingsPad, "Runline.Settings.PadLook"
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FRunlineSettingsPad::RunTest(const FString&)
 {
-	URunlineSettings* S = NewObject<URunlineSettings>();
+	URunlineSettings* S = Defaults();
 	TestTrue(TEXT("inside the dead zone"), S->PadLook(FVector2D(0.1, 0.0), 0.1f).IsZero());
 	const FVector2D L = S->PadLook(FVector2D(0.5, 0.0), 0.1f);
 	TestEqual(TEXT("quadratic response"), L.X, -0.08, 1e-6);
