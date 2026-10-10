@@ -338,6 +338,7 @@ private:
     void MoveBy(Vec3 d, const World& world);
     void SlideState(float dt, float t, const Input& input, const World& world);
     void RollState(float dt, float t, const World& world);
+    void LayOnGroundState(float dt, LayOnGround s, const Input& input, const World& world);
     void VaultState(float dt, Vault v, const World& world);
     void GrabTransferState(float dt, GrabTransfer g);
     void CheckBarbedWire(const World& world);

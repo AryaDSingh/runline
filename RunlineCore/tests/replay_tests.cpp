@@ -25,8 +25,18 @@ State StateFromName(const std::string& name) {
 }
 
 /// A starting state rebuilt from its full Rust Debug text (trace `state_debug`), for the states
-/// tests start in with a payload. So far: `LedgeHang { normal: Vec3(x, y, z), ledge_y: Y, turned: B }`.
+/// tests start in with a payload. So far: `LedgeHang { normal: Vec3(x, y, z), ledge_y: Y, turned: B }`
+/// and `LayOnGround { t: T, getting_up: None | Some(G), back_roll: B }`.
 std::optional<State> StateFromDebug(const std::string& d) {
+    if (d.rfind("LayOnGround {", 0) == 0) {
+        float t = 0.0f, g = 0.0f;
+        char backRoll[8] = {};
+        if (std::sscanf(d.c_str(), "LayOnGround { t: %f, getting_up: Some(%f), back_roll: %7[a-z] }", &t, &g, backRoll) == 3)
+            return LayOnGround{t, g, std::string(backRoll) == "true"};
+        if (std::sscanf(d.c_str(), "LayOnGround { t: %f, getting_up: None, back_roll: %7[a-z] }", &t, backRoll) == 2)
+            return LayOnGround{t, std::nullopt, std::string(backRoll) == "true"};
+        throw std::runtime_error("can't read state " + d);
+    }
     if (d.rfind("LedgeHang {", 0) != 0) return std::nullopt;
     float x, y, z, ledgeY;
     char turned[8] = {};

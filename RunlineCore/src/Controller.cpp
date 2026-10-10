@@ -372,6 +372,7 @@ void Controller::Substep(float dt, const Input& input, const World& world) {
     else if (const auto* l = std::get_if<LedgeHang>(&state)) HangState(dt, l->normal, l->ledgeY, input, world);
     else if (const auto* sl = std::get_if<Slide>(&state)) SlideState(dt, sl->t, input, world);
     else if (const auto* r = std::get_if<Roll>(&state)) RollState(dt, r->t, world);
+    else if (const auto* lg = std::get_if<LayOnGround>(&state)) LayOnGroundState(dt, *lg, input, world);
     else if (const auto* v = std::get_if<Vault>(&state)) VaultState(dt, *v, world);
     else if (const auto* g = std::get_if<GrabTransfer>(&state)) GrabTransferState(dt, *g);
     else if (const auto* tr = std::get_if<Traverse>(&state)) TraverseState(dt, *tr, world);
@@ -1216,6 +1217,42 @@ void Controller::RollState(float dt, float t, const World& world) {
     }
     Integrate(dt, world, true);
     if (!Grounded(world)) state = Air{};
+}
+
+/// TdMove_LayOnGround: lie there until you ask to get up: jump, or forward once the fall onto
+/// your back has played (LayOnGroundFallTime). Pull back instead and you roll backwards
+/// (GetUpBack). Getting up takes LayOnGroundGetUpTime (BackRollTime for the roll).
+void Controller::LayOnGroundState(float dt, LayOnGround s, const Input& input, const World& world) {
+    const Tuning tu = tuning;
+    const float t = s.t + dt;
+    vel = Vec3{0.0f, FMin(vel.y, 0.0f), 0.0f};
+    const bool hintDown = std::fabs(input.moveAxis.x) <= 0.3f && input.moveAxis.y < -0.8f;
+    std::optional<float> gettingUp;
+    bool backRoll = false;
+    if (s.gettingUp) {
+        gettingUp = *s.gettingUp + dt;
+        backRoll = s.backRoll;
+    } else if (hintDown) {
+        events.push_back({EventKind::BackRoll});
+        gettingUp = 0.0f;
+        backRoll = true;
+    } else if (jumpBuffer_ > 0.0f || (input.moveAxis.y > 0.8f && t >= tu.layOnGroundFallTime)) {
+        jumpBuffer_ = 0.0f;
+        gettingUp = 0.0f;
+    }
+    const float done = backRoll ? tu.backRollTime : tu.layOnGroundGetUpTime;
+    if (gettingUp && *gettingUp >= done) {
+        if (backRoll) {
+            // EvadeRoll's root motion: you end up behind where you lay.
+            const Vec3 back = -ForwardOf(yaw) * tu.backRollDistance;
+            MoveBy(back, world);
+            crouched = !TryStand(world);
+        }
+        state = Ground{};
+    } else {
+        state = LayOnGround{t, gettingUp, backRoll};
+    }
+    Integrate(dt, world, true);
 }
 
 // ---------------------------------------------------------------- vaults

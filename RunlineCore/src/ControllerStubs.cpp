@@ -46,7 +46,7 @@ bool Controller::TryGrabFixture(const World&) { return false; }
 bool Controller::SoftBelow(const World&, float) const { return false; }
 void Controller::CheckBarbedWire(const World&) {}
 
-// NOT PORTED: the states the core can enter but doesn't run yet (M1d: none left; M4: SoftLand, LayOnGround).
+// NOT PORTED: the states the core can enter but doesn't run yet (M1d: none left; M2a ported LayOnGround; M4: SoftLand).
 void Controller::UnportedState(const State& s, float, const Input&, const World&) {
     throw NotPorted(std::string("state ") + StateName(s));
 }

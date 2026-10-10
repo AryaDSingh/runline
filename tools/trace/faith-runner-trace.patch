@@ -102,10 +102,10 @@ index 5efc4e5..b7eb74b 100644
  mod rooftops_tests;
 diff --git a/crates/faith_move/src/runline_scenarios.rs b/crates/faith_move/src/runline_scenarios.rs
 new file mode 100644
-index 0000000..7414654
+index 0000000..27a6118
 --- /dev/null
 +++ b/crates/faith_move/src/runline_scenarios.rs
-@@ -0,0 +1,388 @@
+@@ -0,0 +1,398 @@
 +//! (Runline trace patch) Scenarios faith-runner's own tests don't cover, recorded only so
 +//! RunlineCore's replays can check them: the jump buffer (jump pressed in the air just before
 +//! touchdown) and the walk-off coyote jump (jump pressed just after running off a ledge). They
@@ -494,6 +494,16 @@ index 0000000..7414654
 +}
 +
 +
++
++/// On your back, holding forward: you get up once the fall onto your back has played
++/// (LayOnGroundFallTime), not before (faith-runner's own test gets up by jumping).
++#[test]
++fn lay_on_ground_forward_gets_up() {
++    let w = floor();
++    let mut c = Controller::new(Tuning::default(), Vec3::ZERO, 0.0);
++    c.state = State::LayOnGround { t: 0.0, getting_up: None, back_roll: false };
++    drive(&w, c, 180, |_, _| fwd_in());
++}
 diff --git a/crates/faith_move/src/trace.rs b/crates/faith_move/src/trace.rs
 new file mode 100644
 index 0000000..4407e09
