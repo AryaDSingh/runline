@@ -3,7 +3,6 @@
 #include "GameFramework/GameModeBase.h"
 #include "RunlineRunGameMode.generated.h"
 
-class ARunlineCourse;
 
 /// Plays a faith-runner course with the runner: `?game=/Script/Runline.RunlineRunGameMode?course=rooftops`
 /// on any map (an empty one such as /Engine/Maps/Entry). The course defaults to greybox.
@@ -20,9 +19,9 @@ public:
 	ARunlineRunGameMode();
 
 	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
+	/// Spawns the CSV course `CourseName` into World unless the map has its own (any checkpoint).
+	static void EnsureCourse(UWorld* World, const FString& CourseName);
 	virtual void StartPlay() override;
-	/// The course, built on first use.
-	ARunlineCourse* GetCourse();
 
 private:
 	FString CourseName = TEXT("greybox");
@@ -31,5 +30,4 @@ private:
 	bool bAutorun = false;
 	/// ?pitch=<degrees>: look up (+) or down (-) at the start (screenshots of the arms and body).
 	float StartPitchDeg = 0.0f;
-	UPROPERTY() TObjectPtr<ARunlineCourse> Course;
 };

@@ -30,6 +30,8 @@ namespace RunlineUnits
 		return {{float(B.Min.Y / CmPerMetre), float(B.Min.Z / CmPerMetre), float(-B.Max.X / CmPerMetre)},
 		        {float(B.Max.Y / CmPerMetre), float(B.Max.Z / CmPerMetre), float(-B.Min.X / CmPerMetre)}};
 	}
+	/// An Unreal yaw (degrees) as a core yaw (radians): the sign flips.
+	inline float ToCoreYaw(double UnrealYawDegrees) { return float(-FMath::DegreesToRadians(UnrealYawDegrees)); }
 	/// Core view angles (radians) to an Unreal rotator (degrees): yaw flips sign, pitch and roll keep it.
 	inline FRotator ToUnrealRotator(float Yaw, float Pitch, float Roll = 0.0f)
 	{

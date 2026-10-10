@@ -13,7 +13,7 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "InputModifiers.h"
-#include "RunlineCourse.h"
+#include "RunlineCourseActors.h"
 #include "RunlineMovementComponent.h"
 #include "RunlineRunGameMode.h"
 #include "RunlineSettings.h"
@@ -76,13 +76,8 @@ void ARunlineRunner::BeginPlay()
 {
 	Super::BeginPlay();
 	AddTickPrerequisiteComponent(GetCharacterMovement());
-	if (ARunlineRunGameMode* Mode = GetWorld()->GetAuthGameMode<ARunlineRunGameMode>())
-		Course = Mode->GetCourse();
-	if (Course && Course->Checkpoints().Num() > 0)
-	{
-		const ARunlineCourse::FCheckpoint& Start = Course->Checkpoints()[0];
-		Runline().SpawnAt(Start.Spawn, Start.Yaw);
-	}
+	for (ARunlineCheckpoint* C : RunlineCourses::Checkpoints(GetWorld())) Checkpoints.Add(C);
+	if (Checkpoints.Num() > 0) Runline().SpawnAt(Checkpoints[0]->CoreSpawn(), Checkpoints[0]->CoreYaw());
 }
 
 void ARunlineRunner::Tick(float DeltaSeconds)
@@ -94,16 +89,13 @@ void ARunlineRunner::Tick(float DeltaSeconds)
 	UpdateBodyPlacement();
 	if (AController* C = GetController()) C->SetControlRotation(M.GetRenderRotation());
 	// Checkpoints: faith-runner's app takes a checkpoint further on than the current one.
-	if (Course)
+	TArray<ARunlineCheckpoint*> Cps(Checkpoints);
+	const int32 At = RunlineCourses::CheckpointAt(Cps, M.Core().feet);
+	if (At > Checkpoint)
 	{
-		const int32 At = Course->CheckpointAt(M.Core().feet);
-		if (At > Checkpoint)
-		{
-			Checkpoint = At;
-			const ARunlineCourse::FCheckpoint& Cp = Course->Checkpoints()[At];
-			Runline().SetRespawn(Cp.Spawn, Cp.Yaw);
-			if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::White, FString::Printf(TEXT("CHECKPOINT - %s"), *Cp.Name));
-		}
+		Checkpoint = At;
+		Runline().SetRespawn(Cps[At]->CoreSpawn(), Cps[At]->CoreYaw());
+		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::White, FString::Printf(TEXT("CHECKPOINT - %s"), *Cps[At]->CheckpointName));
 	}
 }
 

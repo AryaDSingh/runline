@@ -3,7 +3,7 @@
 #include "GameFramework/Character.h"
 #include "RunlineRunner.generated.h"
 
-class ARunlineCourse;
+class ARunlineCheckpoint;
 class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
@@ -70,7 +70,7 @@ private:
 	UPROPERTY() TObjectPtr<UInputAction> RespawnAction;
 	UPROPERTY() TObjectPtr<UInputAction> MenuAction;
 	TSharedPtr<class SRunlineMenu> Menu;
-	UPROPERTY() TObjectPtr<ARunlineCourse> Course;
+	UPROPERTY() TArray<TObjectPtr<ARunlineCheckpoint>> Checkpoints;
 	int32 Checkpoint = 0;
 	// Keys and stick, summed as faith-runner does (the core clamps the length).
 	FVector2D KeyMove = FVector2D::ZeroVector;

@@ -1,8 +1,10 @@
 #include "Misc/AutomationTest.h"
 #include "Components/BoxComponent.h"
-#include "Misc/FileHelper.h"
-#include "Misc/Paths.h"
-#include "RunlineCourse.h"
+#include "Components/StaticMeshComponent.h"
+#include "EngineUtils.h"
+#include "RunlineCourseActors.h"
+#include "RunlineCourseData.h"
+#include "RunlineRunGameMode.h"
 #include "RunlineTestWorld.h"
 #include "UnrealWorld.h"
 
@@ -10,19 +12,10 @@
 
 namespace
 {
-	/// The level file's solid boxes, straight from the CSV (core metres).
-	TArray<runline::Aabb> SolidsInFile(const FString& Name)
+	TArray<ARunlineBox*> BoxesIn(UWorld* World)
 	{
-		TArray<FString> Lines;
-		FFileHelper::LoadFileToStringArray(Lines, *(FPaths::ProjectDir() / TEXT("Data/Levels") / Name + TEXT(".csv")));
-		TArray<runline::Aabb> Out;
-		for (const FString& L : Lines)
-		{
-			TArray<FString> F;
-			L.ParseIntoArray(F, TEXT(","), false);
-			if (F.Num() == 8 && F[0] == TEXT("solid"))
-				Out.Add({{FCString::Atof(*F[2]), FCString::Atof(*F[3]), FCString::Atof(*F[4])}, {FCString::Atof(*F[5]), FCString::Atof(*F[6]), FCString::Atof(*F[7])}});
-		}
+		TArray<ARunlineBox*> Out;
+		for (TActorIterator<ARunlineBox> It(World); It; ++It) Out.Add(*It);
 		return Out;
 	}
 }
@@ -33,51 +26,94 @@ bool FRunlineCourseLoads::RunTest(const FString&)
 {
 	for (const TCHAR* Name : {TEXT("greybox"), TEXT("rooftops")})
 	{
+		FRunlineCourseData Data;
+		TestTrue(FString::Printf(TEXT("%s loads"), Name), FRunlineCourseData::Load(Name, Data));
+		int32 Solids = 0;
+		for (const auto& B : Data.Boxes) Solids += B.bSolid ? 1 : 0;
+		TestTrue(TEXT("solids"), Solids > 10);
+		TestTrue(TEXT("checkpoints"), Data.Checkpoints.Num() > 0);
 		FRunlineTestWorld TW;
-		ARunlineCourse* Course = TW.World->SpawnActor<ARunlineCourse>();
-		TestTrue(FString::Printf(TEXT("%s loads"), Name), Course->Load(Name));
-		const TArray<runline::Aabb> Want = SolidsInFile(Name);
-		TestTrue(TEXT("file has solids"), Want.Num() > 10);
-		TestEqual(TEXT("one collider per solid"), Course->SolidCount(), Want.Num());
-		TestTrue(TEXT("checkpoints"), Course->Checkpoints().Num() > 0);
-		// Every collider covers exactly its CSV box, in level order.
-		TArray<UBoxComponent*> Boxes;
-		Course->GetComponents<UBoxComponent>(Boxes);
+		RunlineCourses::Spawn(TW.World, Data, false);
+		// Every box covers exactly its CSV box, with its level order.
 		int32 Exact = 0;
-		for (int32 I = 0; I < Want.Num(); ++I)
+		TArray<ARunlineBox*> Boxes = BoxesIn(TW.World);
+		TestEqual(TEXT("one actor per box"), Boxes.Num(), Data.Boxes.Num());
+		for (const ARunlineBox* A : Boxes)
 		{
-			for (const UBoxComponent* B : Boxes)
-			{
-				if (!B->ComponentHasTag(FName(*FString::Printf(TEXT("RunlineOrder%d"), I)))) continue;
-				const FVector C = B->GetComponentLocation(), E = B->GetScaledBoxExtent();
-				const runline::Aabb Got = RunlineUnits::ToCoreBox(FBox(C - E, C + E));
-				Exact += (Got.min == Want[I].min && Got.max == Want[I].max) ? 1 : 0;
-			}
+			if (!A->bSolid) continue;
+			const auto& Want = Data.Boxes[A->Order];
+			const runline::Aabb Got = A->CoreBox();
+			Exact += (Want.bSolid && Got.min == Want.Box.min && Got.max == Want.Box.max) ? 1 : 0;
 		}
-		TestEqual(TEXT("colliders exactly match the file"), Exact, Want.Num());
-		// She runs on it: spawned at the first checkpoint, held forward for a second, she stays
-		// on the roof.
-		const ARunlineCourse::FCheckpoint& Start = Course->Checkpoints()[0];
+		TestEqual(TEXT("solids exactly match the file, in order"), Exact, Solids);
+		const TArray<ARunlineCheckpoint*> Cps = RunlineCourses::Checkpoints(TW.World);
+		TestEqual(TEXT("checkpoints"), Cps.Num(), Data.Checkpoints.Num());
+		TestEqual(TEXT("first checkpoint's name"), Cps[0]->CheckpointName, Data.Checkpoints[0].Name);
+		TestTrue(TEXT("spawn round-trips"), Cps[0]->CoreSpawn() == Data.Checkpoints[0].Spawn);
+		// She runs on it.
 		const FUnrealWorld W(TW.World, nullptr);
-		runline::Controller C(runline::Tuning{}, Start.Spawn, Start.Yaw);
+		runline::Controller C(runline::Tuning{}, Cps[0]->CoreSpawn(), Cps[0]->CoreYaw());
 		C.Respawn();
 		runline::Input In;
 		In.moveAxis = {0.0f, 1.0f};
 		for (int32 I = 0; I < 60; ++I) C.Step(1.0f / 60.0f, In, W);
-		TestTrue(FString::Printf(TEXT("%s: runs on the roof"), Name), C.feet.y > Start.Spawn.y - 0.5f && C.feet.z < Start.Spawn.z - 1.0f);
-		TestEqual(TEXT("checkpoint at the start"), Course->CheckpointAt(Start.Spawn), 0);
+		TestTrue(FString::Printf(TEXT("%s: runs on the roof"), Name), C.feet.y > Cps[0]->CoreSpawn().y - 0.5f && C.feet.z < Cps[0]->CoreSpawn().z - 1.0f);
+		TestEqual(TEXT("checkpoint at the start"), RunlineCourses::CheckpointAt(Cps, Cps[0]->CoreSpawn()), 0);
 	}
 	{
-		FRunlineTestWorld TW;
-		ARunlineCourse* Course = TW.World->SpawnActor<ARunlineCourse>();
-		Course->Load(TEXT("rooftops"));
-		TestEqual(TEXT("rooftops starts at R1"), Course->Checkpoints()[0].Name, FString(TEXT("R1 Start")));
+		FRunlineCourseData Data;
+		FRunlineCourseData::Load(TEXT("rooftops"), Data);
+		TestEqual(TEXT("rooftops starts at R1"), Data.Checkpoints[0].Name, FString(TEXT("R1 Start")));
+		TestTrue(TEXT("rooftops has a finish"), Data.Finish.IsSet());
 	}
 	{
 		AddExpectedError(TEXT("no level file"), EAutomationExpectedErrorFlags::Contains, 1);
+		FRunlineCourseData Data;
+		TestFalse(TEXT("a missing level fails cleanly"), FRunlineCourseData::Load(TEXT("no_such_level"), Data));
+	}
+	return true;
+}
+
+// Review Focus 1: a designer moves or resizes a box in the editor; the mesh follows, and the core
+// collides with the new box.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineCourseBoxEdit, "Runline.Course.BoxMeshFollowsCollider",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineCourseBoxEdit::RunTest(const FString&)
+{
+	FRunlineTestWorld TW;
+	ARunlineBox* A = TW.World->SpawnActor<ARunlineBox>();
+	A->SetFromCore(runline::Aabb::New({-1.0f, 0.0f, -1.0f}, {1.0f, 1.0f, 1.0f}));
+	// An editor drag: bigger and moved.
+	A->Box->SetBoxExtent(FVector(300.0, 200.0, 100.0));
+	A->SetActorLocation(FVector(1000.0, 0.0, 50.0));
+	A->RerunConstructionScripts();
+	const FBox MeshBox = A->Mesh->Bounds.GetBox();
+	const FBox ColliderBox = A->Box->Bounds.GetBox();
+	TestTrue(TEXT("the mesh covers the collider"), MeshBox.Min.Equals(ColliderBox.Min, 0.01) && MeshBox.Max.Equals(ColliderBox.Max, 0.01));
+	const FUnrealWorld W(TW.World, nullptr);
+	TestTrue(TEXT("the core sees the moved box"), W.Overlaps(RunlineUnits::ToCoreBox(ColliderBox.ExpandBy(-1.0))));
+	TestFalse(TEXT("and not the old one"), W.Overlaps(runline::Aabb::New({-0.5f, 0.2f, -0.5f}, {0.5f, 0.8f, 0.5f})));
+	return true;
+}
+
+// Review Focus 2: a map with no checkpoints (the empty map) gets the CSV course; a map with its
+// own course gets nothing extra.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineCourseFallback, "Runline.Course.SpawnsWhenTheMapHasNone",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineCourseFallback::RunTest(const FString&)
+{
+	{
 		FRunlineTestWorld TW;
-		ARunlineCourse* Course = TW.World->SpawnActor<ARunlineCourse>();
-		TestFalse(TEXT("a missing level fails cleanly"), Course->Load(TEXT("no_such_level")));
+		ARunlineRunGameMode::EnsureCourse(TW.World, TEXT("greybox"));
+		TestTrue(TEXT("spawned the CSV course"), RunlineCourses::Checkpoints(TW.World).Num() > 0);
+	}
+	{
+		FRunlineTestWorld TW;
+		ARunlineCheckpoint* Own = TW.World->SpawnActor<ARunlineCheckpoint>();
+		Own->CheckpointName = TEXT("Designer start");
+		ARunlineRunGameMode::EnsureCourse(TW.World, TEXT("greybox"));
+		TestEqual(TEXT("left the map's own course alone"), RunlineCourses::Checkpoints(TW.World).Num(), 1);
+		TestEqual(TEXT("no boxes added"), BoxesIn(TW.World).Num(), 0);
 	}
 	return true;
 }

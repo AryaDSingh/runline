@@ -4,7 +4,8 @@
 #include "TimerManager.h"
 #include "UnrealClient.h"
 #include "Kismet/GameplayStatics.h"
-#include "RunlineCourse.h"
+#include "RunlineCourseActors.h"
+#include "RunlineCourseData.h"
 #include "RunlineMovementComponent.h"
 #include "RunlineRunner.h"
 
@@ -28,6 +29,7 @@ void ARunlineRunGameMode::InitGame(const FString& MapName, const FString& Option
 
 void ARunlineRunGameMode::StartPlay()
 {
+	EnsureCourse(GetWorld(), CourseName);   // before the runner's BeginPlay looks for checkpoints
 	Super::StartPlay();
 	if (bMenuAtStart)
 	{
@@ -81,12 +83,9 @@ void ARunlineRunGameMode::StartPlay()
 	}));
 }
 
-ARunlineCourse* ARunlineRunGameMode::GetCourse()
+void ARunlineRunGameMode::EnsureCourse(UWorld* World, const FString& CourseName)
 {
-	if (!Course)
-	{
-		Course = GetWorld()->SpawnActor<ARunlineCourse>();
-		if (Course) Course->Load(CourseName);
-	}
-	return Course;
+	if (RunlineCourses::Checkpoints(World).Num() > 0) return;   // the map has its own course
+	FRunlineCourseData Data;
+	if (FRunlineCourseData::Load(CourseName, Data)) RunlineCourses::Spawn(World, Data, true);
 }
