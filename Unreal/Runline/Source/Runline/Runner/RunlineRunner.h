@@ -1,9 +1,11 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "RunlineTimer.h"
 #include "RunlineRunner.generated.h"
 
 class ARunlineCheckpoint;
+class ARunlineFinish;
 class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
@@ -35,6 +37,10 @@ public:
 	/// Turns the body with the view and stands it where her eye is (called each tick).
 	void UpdateBodyPlacement();
 	bool IsMenuOpen() const { return Menu.IsValid(); }
+	/// The time trial (faith-runner's rules; real seconds, so the clock reads true at any game speed).
+	const FRunlineTimer& Timer() const { return Clock; }
+	/// Respawns at the current checkpoint (R, the menu) and tells the clock.
+	void RespawnHere();
 
 private:
 	void BuildInput();
@@ -71,6 +77,12 @@ private:
 	UPROPERTY() TObjectPtr<UInputAction> MenuAction;
 	TSharedPtr<class SRunlineMenu> Menu;
 	UPROPERTY() TArray<TObjectPtr<ARunlineCheckpoint>> Checkpoints;
+	UPROPERTY() TObjectPtr<ARunlineFinish> Finish;
+	FRunlineTimer Clock;
+	/// Seconds left to show the finish time.
+	float FinishShownFor = 0.0f;
+	TSharedPtr<class SWidget> Hud;
+	FText HudText() const;
 	int32 Checkpoint = 0;
 	// Keys and stick, summed as faith-runner does (the core clamps the length).
 	FVector2D KeyMove = FVector2D::ZeroVector;

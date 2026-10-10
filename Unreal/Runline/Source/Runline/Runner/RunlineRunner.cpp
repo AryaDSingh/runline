@@ -19,6 +19,9 @@
 #include "RunlineSettings.h"
 #include "RunlineUnits.h"
 #include "SRunlineMenu.h"
+#include "Widgets/Layout/SBox.h"
+#include "Widgets/Text/STextBlock.h"
+#include "Styling/CoreStyle.h"
 #include "Engine/GameViewportClient.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
@@ -78,6 +81,7 @@ void ARunlineRunner::BeginPlay()
 	AddTickPrerequisiteComponent(GetCharacterMovement());
 	for (ARunlineCheckpoint* C : RunlineCourses::Checkpoints(GetWorld())) Checkpoints.Add(C);
 	if (Checkpoints.Num() > 0) Runline().SpawnAt(Checkpoints[0]->CoreSpawn(), Checkpoints[0]->CoreYaw());
+	Finish = RunlineCourses::Finish(GetWorld());
 }
 
 void ARunlineRunner::Tick(float DeltaSeconds)
@@ -97,6 +101,18 @@ void ARunlineRunner::Tick(float DeltaSeconds)
 		Runline().SetRespawn(Cps[At]->CoreSpawn(), Cps[At]->CoreYaw());
 		if (GEngine) GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::White, FString::Printf(TEXT("CHECKPOINT - %s"), *Cps[At]->CheckpointName));
 	}
+	// The time trial, after the checkpoint (faith-runner's app order). Real seconds: the actor doesn't
+	// tick while paused.
+	const runline::Controller& Core = M.Core();
+	const bool bInFinish = Finish && RunlineCourses::Inside(Finish->CoreRegion(), Core.feet);
+	if (Clock.Update(DeltaSeconds, At == 0, std::holds_alternative<runline::Ground>(Core.state), bInFinish, Checkpoint))
+	{
+		// faith-runner: the finish puts you back on the start checkpoint.
+		Checkpoint = 0;
+		if (Cps.Num() > 0) Runline().SetRespawn(Cps[0]->CoreSpawn(), Cps[0]->CoreYaw());
+		FinishShownFor = 3.0f;
+	}
+	FinishShownFor = FMath::Max(FinishShownFor - DeltaSeconds, 0.0f);
 }
 
 void ARunlineRunner::UpdateBodyPlacement()
@@ -122,6 +138,8 @@ void ARunlineRunner::EndPlay(const EEndPlayReason::Type Reason)
 		GEngine->GameViewport->RemoveViewportWidgetContent(Menu.ToSharedRef());   // no controller left to close it
 		Menu.Reset();
 	}
+	if (Hud.IsValid() && GEngine && GEngine->GameViewport) GEngine->GameViewport->RemoveViewportWidgetContent(Hud.ToSharedRef());
+	Hud.Reset();
 	URunlineSettings::Get().Save();
 	Super::EndPlay(Reason);
 }
@@ -173,6 +191,18 @@ void ARunlineRunner::PawnClientRestart()
 {
 	Super::PawnClientRestart();
 	BuildInput();
+	if (!Hud.IsValid() && GEngine && GEngine->GameViewport)
+	{
+		TWeakObjectPtr<ARunlineRunner> Self(this);
+		Hud = SNew(SBox).HAlign(HAlign_Center).VAlign(VAlign_Top).Padding(FMargin(0.0f, 24.0f))
+		[
+			SNew(STextBlock)
+			.Font(FCoreStyle::GetDefaultFontStyle("Bold", 28))
+			.ShadowOffset(FVector2D(2.0, 2.0))
+			.Text_Lambda([Self] { return Self.IsValid() ? Self->HudText() : FText::GetEmpty(); })
+		];
+		GEngine->GameViewport->AddViewportWidgetContent(Hud.ToSharedRef(), 5);
+	}
 	if (const APlayerController* PC = Cast<APlayerController>(GetController()))
 		if (UEnhancedInputLocalPlayerSubsystem* Sub = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
 			Sub->AddMappingContext(Mapping, 1);
@@ -210,7 +240,26 @@ void ARunlineRunner::OnJumpStop(const FInputActionValue&) { Runline().SetJumpHel
 void ARunlineRunner::OnCrouch(const FInputActionValue&) { Runline().PressCrouch(); Runline().SetCrouchHeld(true); }
 void ARunlineRunner::OnCrouchStop(const FInputActionValue&) { Runline().SetCrouchHeld(false); }
 void ARunlineRunner::OnTurn(const FInputActionValue&) { Runline().PressTurn(); }
-void ARunlineRunner::OnRespawn(const FInputActionValue&) { Runline().Respawn(); }
+void ARunlineRunner::OnRespawn(const FInputActionValue&) { RespawnHere(); }
+
+void ARunlineRunner::RespawnHere()
+{
+	Runline().Respawn();
+	Clock.OnRespawn(Checkpoint);
+}
+
+FText ARunlineRunner::HudText() const
+{
+	if (Clock.Running) return FText::FromString(FRunlineTimer::Format(*Clock.Running));
+	if (FinishShownFor > 0.0f && Clock.Last)
+	{
+		const bool bBest = Clock.Best && *Clock.Best == *Clock.Last;
+		return FText::FromString(FString::Printf(TEXT("FINISH %s%s"), *FRunlineTimer::Format(*Clock.Last),
+			bBest ? TEXT("  NEW BEST") : *FString::Printf(TEXT("  (best %s)"), *FRunlineTimer::Format(*Clock.Best))));
+	}
+	if (Clock.Best) return FText::FromString(FString::Printf(TEXT("best %s"), *FRunlineTimer::Format(*Clock.Best)));
+	return FText::GetEmpty();
+}
 void ARunlineRunner::OnMenu(const FInputActionValue&) { ToggleMenu(); }
 
 void ARunlineRunner::ToggleMenu()
@@ -221,7 +270,7 @@ void ARunlineRunner::ToggleMenu()
 	{
 		Menu = SNew(SRunlineMenu)
 			.OnResume(FSimpleDelegate::CreateUObject(this, &ARunlineRunner::ToggleMenu))
-			.OnRespawn(FSimpleDelegate::CreateWeakLambda(this, [this] { ToggleMenu(); Runline().Respawn(); }))
+			.OnRespawn(FSimpleDelegate::CreateWeakLambda(this, [this] { ToggleMenu(); RespawnHere(); }))
 			.OnQuit(FSimpleDelegate::CreateWeakLambda(this, [this, PC] { UKismetSystemLibrary::QuitGame(this, PC, EQuitPreference::Quit, false); }));
 		GEngine->GameViewport->AddViewportWidgetContent(Menu.ToSharedRef(), 10);
 		FInputModeUIOnly Mode;
