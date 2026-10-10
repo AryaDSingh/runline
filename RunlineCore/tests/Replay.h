@@ -10,7 +10,9 @@
 #include <stdexcept>
 #include <string>
 #include "TraceFormat.h"
+#include "runline/Camera.h"
 #include "runline/Controller.h"
+#include "runline/Look.h"
 #include <bit>
 #include <cstdio>
 #include <cstdint>
@@ -207,6 +209,18 @@ inline std::string runline::ReplayAccess::Diff(const trace::Hid& want, const run
 namespace replay {
 using namespace runline;
 
+/// First difference in the camera (trace v5 `fx`), or "".
+inline std::string DiffFx(const trace::Fx& want, const Shot& shot, float swanForward, float swanDown) {
+    std::ostringstream d;
+    const auto cmp = [&](const char* f, float w, float g) { if (d.str().empty() && !Same(w, g)) d << f << ": want " << Num(w) << ", got " << Num(g); };
+    cmp("fx.eye.x", want.eye.x, shot.view.eye.x); cmp("fx.eye.y", want.eye.y, shot.view.eye.y); cmp("fx.eye.z", want.eye.z, shot.view.eye.z);
+    cmp("fx.yaw", want.yaw, shot.view.yaw); cmp("fx.pitch", want.pitch, shot.view.pitch); cmp("fx.roll", want.roll, shot.view.roll);
+    cmp("fx.fov", want.fov, shot.view.fovDeg);
+    cmp("fx.step_phase", want.stepPhase, shot.stepPhase); cmp("fx.gait", want.gait, shot.gait); cmp("fx.shake", want.shake, shot.shake);
+    cmp("swan.forward", want.swanForward, swanForward); cmp("swan.down", want.swanDown, swanDown);
+    return d.str();
+}
+
 /// Replays a trace; returns "" if every frame matches, else where and how it first diverged.
 /// `worldFor(i)` gives the World for trace world i (BoxWorld/MeshWorld on the desktop,
 /// FUnrealWorld in Unreal); it is called every frame, so build worlds up front.
@@ -215,6 +229,9 @@ inline std::string Replay(const trace::Trace& t, const std::function<const World
     if (t.frames.empty()) return "has no frames";
     // Controller::new at the recorded spawn, then whatever the test set before its first step.
     Controller c(Tuning{}, t.spawn, t.spawnYaw);
+    // What faith-runner's app and rig run after each step (trace v5 `fx`).
+    CameraFx fx;
+    SwanNeck swan;
     Apply(c, t.init, t.initStateDebug);
     for (size_t i = 0; i < t.frames.size(); ++i) {
         const trace::Frame& f = t.frames[i];
@@ -236,6 +253,11 @@ inline std::string Replay(const trace::Trace& t, const std::function<const World
         std::string d = Diff(f.out, c, f.events);
         if (d.empty() && f.ext) d = DiffExt(*f.ext, c);
         if (d.empty() && f.hid) d = ReplayAccess::Diff(*f.hid, c);
+        if (d.empty() && f.fx) {
+            const Shot shot = fx.Update(f.in.dt, c, in);
+            const auto [sf, sd] = swan.Update(c, f.in.dt);
+            d = DiffFx(*f.fx, shot, sf, sd);
+        }
         if (!d.empty()) return "frame " + std::to_string(i) + " (of " + std::to_string(t.frames.size()) + "): " + d;
     }
     return "";

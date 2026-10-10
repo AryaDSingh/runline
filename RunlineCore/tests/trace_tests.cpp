@@ -4,7 +4,7 @@ using namespace runline;
 
 TEST_CASE("Parse reads every record kind, empty events and fixture text with commas") {   // Review Focus 3
     std::istringstream in(
-        "trace,4\n"
+        "trace,5\n"
         "tuning_default,1\n"
         "spawn,0,1,0,0.25\n"
         "init,0,1,0,0,0,0,0,0,Air,0,0\n"
@@ -20,7 +20,8 @@ TEST_CASE("Parse reads every record kind, empty events and fixture text with com
         "in,0.016666668,0,0,0,0,0,0,0,0,0,0,0,0\n"
         "out,0,0,0,0,0,0,1.5,-0.2,Ground,0,0,Land;Jump\n"
         "ext,0,1.66,0,-0.05,1,0.1,1,-0.2,0,,,,Land:3.5:0.6\n"
-        "hid,0.5,1,0.1,inf,WallJump,6.5,1,2,3,2,1,1,0,0,0,0.25,1,0.5,0.25,Air,0.75,0.01,1.6,2.5,1,0,1,0.3,0,1,-4,0.2\n");
+        "hid,0.5,1,0.1,inf,WallJump,6.5,1,2,3,2,1,1,0,0,0,0.25,1,0.5,0.25,Air,0.75,0.01,1.6,2.5,1,0,1,0.3,0,1,-4,0.2\n"
+        "fx,0,1.7,0.5,0.1,-0.2,0.05,95,1.5,0.8,0.3,0.2,0.1\n");
     const trace::Trace t = trace::Parse(in, "mini");
     CHECK(t.defaultTuning);
     CHECK(t.init.state == "Air");
@@ -90,18 +91,32 @@ TEST_CASE("Parse reads every record kind, empty events and fixture text with com
     CHECK(h.wallrunWallAbove);
     CHECK(h.grabSpeed == -4.0f);
     CHECK(h.hangTime == 0.2f);
+    // The camera.
+    CHECK_FALSE(t.frames[0].fx.has_value());
+    REQUIRE(t.frames[1].fx.has_value());
+    const trace::Fx& fx = *t.frames[1].fx;
+    CHECK(fx.eye == Vec3{0, 1.7f, 0.5f});
+    CHECK(fx.yaw == 0.1f);
+    CHECK(fx.pitch == -0.2f);
+    CHECK(fx.roll == 0.05f);
+    CHECK(fx.fov == 95.0f);
+    CHECK(fx.stepPhase == 1.5f);
+    CHECK(fx.gait == 0.8f);
+    CHECK(fx.shake == 0.3f);
+    CHECK(fx.swanForward == 0.2f);
+    CHECK(fx.swanDown == 0.1f);
 }
 
 TEST_CASE("Parse rejects a file with no init, a frame with no output, an old version or a short record") {
-    std::istringstream noInit("trace,4\ntuning_default,1\nin,0.1,0,0,0,0,0,0,0,0,0,0,0,0\n");
+    std::istringstream noInit("trace,5\ntuning_default,1\nin,0.1,0,0,0,0,0,0,0,0,0,0,0,0\n");
     CHECK_THROWS(trace::Parse(noInit, "bad"));
-    std::istringstream noOut("trace,4\ntuning_default,1\nspawn,0,0,0,0\ninit,0,0,0,0,0,0,0,0,Air,0,0\nworld\nend_world\nin,0.1,0,0,0,0,0,0,0,0,0,0,0,0\n");
+    std::istringstream noOut("trace,5\ntuning_default,1\nspawn,0,0,0,0\ninit,0,0,0,0,0,0,0,0,Air,0,0\nworld\nend_world\nin,0.1,0,0,0,0,0,0,0,0,0,0,0,0\n");
     CHECK_THROWS(trace::Parse(noOut, "bad"));
-    std::istringstream v1("trace,3\ntuning_default,1\n");
-    CHECK_THROWS(trace::Parse(v1, "old"));   // older versions lack spawn/set (v1), ext (v2) or hid (v3) records
-    std::istringstream shortIn("trace,4\ntuning_default,1\nspawn,0,0,0,0\ninit,0,0,0,0,0,0,0,0,Air,0,0\nworld\nend_world\nin,0.1,0,0\n");
+    std::istringstream v1("trace,4\ntuning_default,1\n");
+    CHECK_THROWS(trace::Parse(v1, "old"));   // older versions lack spawn/set (v1), ext (v2), hid (v3) or fx (v4) records
+    std::istringstream shortIn("trace,5\ntuning_default,1\nspawn,0,0,0,0\ninit,0,0,0,0,0,0,0,0,Air,0,0\nworld\nend_world\nin,0.1,0,0\n");
     CHECK_THROWS(trace::Parse(shortIn, "short"));   // a truncated record throws instead of reading past the end
-    std::istringstream hidAlone("trace,4\ntuning_default,1\nspawn,0,0,0,0\ninit,0,0,0,0,0,0,0,0,Air,0,0\nworld\nend_world\nin,0.1,0,0,0,0,0,0,0,0,0,0,0,0\nout,0,0,0,0,0,0,0,0,Air,0,0,\nhid,0\n");
+    std::istringstream hidAlone("trace,5\ntuning_default,1\nspawn,0,0,0,0\ninit,0,0,0,0,0,0,0,0,Air,0,0\nworld\nend_world\nin,0.1,0,0,0,0,0,0,0,0,0,0,0,0\nout,0,0,0,0,0,0,0,0,Air,0,0,\nhid,0\n");
     CHECK_THROWS(trace::Parse(hidAlone, "short"));   // hid must follow an ext record, and be whole
 }
 

@@ -227,6 +227,8 @@ public:
     Vec3 spawn{};
     float spawnYaw = 0.0f;
     std::vector<Event> events;
+    /// TdMove_Vertigo's zoom is on (camera.rs narrows the FOV); set by the vertigo move (M4).
+    bool vertigoZoom = false;
     /// Hands up against the wall in front of you (walking or crouched).
     AgainstWall againstWall;
     /// The wall goes on above her head where a wallrun started.

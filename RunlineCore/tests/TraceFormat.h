@@ -70,6 +70,15 @@ struct Hid {
     float grabSpeed = 0, hangTime = 0;
 };
 
+/// The camera after a step (trace v5 `fx` record): faith-runner's CameraFx shot and swan neck, run
+/// over the traced controller as its app and rig do.
+struct Fx {
+    runline::Vec3 eye{};
+    float yaw = 0, pitch = 0, roll = 0, fov = 0;
+    float stepPhase = 0, gait = 0, shake = 0;
+    float swanForward = 0, swanDown = 0;
+};
+
 struct Frame {
     size_t world = 0;   // index into Trace::worlds
     FrameInput in;
@@ -80,6 +89,7 @@ struct Frame {
     std::optional<Snapshot> set;
     std::optional<Ext> ext;
     std::optional<Hid> hid;
+    std::optional<Fx> fx;
 };
 
 struct Trace {
@@ -151,7 +161,7 @@ inline Trace Parse(std::istream& in, const std::string& name) {
         }
         const auto f = Split(line, ',');
         if (f[0] == "trace") {
-            if (f.size() < 2 || f[1] != "4") throw std::runtime_error(name + ": unsupported trace version (re-run make-traces.sh)");
+            if (f.size() < 2 || f[1] != "5") throw std::runtime_error(name + ": unsupported trace version (re-run make-traces.sh)");
         } else if (f[0] == "tuning_default") {
             Need(f, 2, name);
             t.defaultTuning = f[1] == "1";
@@ -178,6 +188,21 @@ inline Trace Parse(std::istream& in, const std::string& name) {
                 }
             }
             t.frames.back().ext = x;
+        } else if (f[0] == "fx") {
+            if (t.frames.empty() || !t.frames.back().hid || t.frames.back().fx) throw std::runtime_error(name + ": fx record not after a hid record");
+            Need(f, 13, name);
+            Fx x;
+            x.eye = {std::stof(f[1]), std::stof(f[2]), std::stof(f[3])};
+            x.yaw = std::stof(f[4]);
+            x.pitch = std::stof(f[5]);
+            x.roll = std::stof(f[6]);
+            x.fov = std::stof(f[7]);
+            x.stepPhase = std::stof(f[8]);
+            x.gait = std::stof(f[9]);
+            x.shake = std::stof(f[10]);
+            x.swanForward = std::stof(f[11]);
+            x.swanDown = std::stof(f[12]);
+            t.frames.back().fx = x;
         } else if (f[0] == "hid") {
             if (t.frames.empty() || !t.frames.back().ext || t.frames.back().hid) throw std::runtime_error(name + ": hid record not after an ext record");
             Need(f, 33, name);

@@ -506,10 +506,10 @@ index 0000000..27a6118
 +}
 diff --git a/crates/faith_move/src/trace.rs b/crates/faith_move/src/trace.rs
 new file mode 100644
-index 0000000..4407e09
+index 0000000..92dcf79
 --- /dev/null
 +++ b/crates/faith_move/src/trace.rs
-@@ -0,0 +1,122 @@
+@@ -0,0 +1,143 @@
 +//! (Runline trace patch) Records every Controller::step a test makes, for RunlineCore's replay
 +//! tests. Only active when FAITH_TRACE_DIR is set. Never committed to faith-runner.
 +use crate::controller::{Controller, Input};
@@ -519,6 +519,10 @@ index 0000000..4407e09
 +use std::io::Write as _;
 +
 +thread_local! {
++    /// (Runline trace v5) Per controller: the camera effects and swan neck that faith-runner's app
++    /// and rig run after each step, and the dt and input of the step in flight.
++    static FX: RefCell<std::collections::HashMap<usize, (crate::CameraFx, crate::SwanNeck, f32, Input)>> =
++        RefCell::new(Default::default());
 +    /// Controllers seen on this test thread (numbered from 1): the world each last wrote, and its
 +    /// state after its last step (to spot a test changing it between steps).
 +    static SEEN: RefCell<Vec<(String, String)>> = RefCell::new(Vec::new());
@@ -559,7 +563,7 @@ index 0000000..4407e09
 +        });
 +        let default = format!("{:?}", c.tuning) == format!("{:?}", Tuning::default());
 +        text += &format!(
-+            "trace,4\ntuning_default,{}\nspawn,{},{},{},{}\ninit,{}\nstate_debug,{:?}\n",
++            "trace,5\ntuning_default,{}\nspawn,{},{},{},{}\ninit,{}\nstate_debug,{:?}\n",
 +            b(default), c.spawn.x, c.spawn.y, c.spawn.z, c.spawn_yaw, snapshot(c), c.state
 +        );
 +    } else {
@@ -590,6 +594,12 @@ index 0000000..4407e09
 +        b(i.jump_pressed), b(i.jump_held), b(i.crouch_pressed), b(i.crouch_held),
 +        b(i.turn_pressed), b(i.melee_pressed), b(i.takedown_pressed), i.strafe_raw
 +    );
++    FX.with(|m| {
++        let mut m = m.borrow_mut();
++        let e = m.entry(c.trace_id).or_insert_with(|| (crate::CameraFx::default(), crate::SwanNeck::default(), 0.0, Input::default()));
++        e.2 = dt;
++        e.3 = i.clone();
++    });
 +    append(c.trace_id, &text);
 +}
 +
@@ -630,7 +640,18 @@ index 0000000..4407e09
 +        .collect();
 +    let now = snapshot(c);
 +    SEEN.with(|s| s.borrow_mut()[c.trace_id - 1].1 = now.clone());
-+    append(c.trace_id, &format!("out,{},{}\n{}{}", now, events.join(";"), ext(c), c.trace_hidden()));
++    let fx = FX.with(|m| {
++        let mut m = m.borrow_mut();
++        let e = m.get_mut(&c.trace_id).unwrap();
++        let shot = e.0.update(e.2, c, &e.3);
++        let (f, d) = e.1.update(c, e.2);
++        let v = shot.view;
++        format!(
++            "fx,{},{},{},{},{},{},{},{},{},{},{},{}\n",
++            v.eye.x, v.eye.y, v.eye.z, v.yaw, v.pitch, v.roll, v.fov_deg, shot.step_phase, shot.gait, shot.shake, f, d
++        )
++    });
++    append(c.trace_id, &format!("out,{},{}\n{}{}{}", now, events.join(";"), ext(c), c.trace_hidden(), fx));
 +}
 diff --git a/crates/faith_move/src/world.rs b/crates/faith_move/src/world.rs
 index d3c3984..1b7a845 100644
