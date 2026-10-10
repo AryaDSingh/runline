@@ -16,4 +16,10 @@ public:
     bool Overlaps(const Aabb& region) const override;
 };
 
+/// BoxWorld's sweep over an explicit list of boxes, in list order (ties keep the earlier box):
+/// the narrowphase FUnrealWorld runs on Unreal's broadphase candidates.
+std::optional<SweepHit> SweepBoxes(const std::vector<Aabb>& boxes, Vec3 half, Vec3 start, Vec3 delta);
+/// Whether any of `boxes` overlaps `region` strictly (touching faces don't count).
+bool OverlapsBoxes(const std::vector<Aabb>& boxes, const Aabb& region);
+
 } // namespace runline

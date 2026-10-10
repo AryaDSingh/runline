@@ -9,6 +9,8 @@ if(MSVC)
   target_compile_options(RunlineCore PRIVATE /W4 /fp:strict)
 endif()
 
+option(RUNLINE_TESTS "Build RunlineCore's doctest suite" ON)
+if(RUNLINE_TESTS)
 include(FetchContent)
 FetchContent_Declare(doctest
   GIT_REPOSITORY https://github.com/doctest/doctest.git
@@ -26,3 +28,4 @@ if(MSVC)
 endif()
 enable_testing()
 add_test(NAME RunlineCoreTests COMMAND RunlineCoreTests)
+endif()

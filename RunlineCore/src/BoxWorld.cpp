@@ -53,6 +53,8 @@ Vec3 ContactOnBox(const Aabb& b, Vec3 half, Vec3 c, Vec3 delta, float t, Vec3 n)
     return p;
 }
 
+} // namespace
+
 /// The first contact of a box swept through some boxes.
 std::optional<SweepHit> SweepBoxes(const std::vector<Aabb>& boxes, Vec3 half, Vec3 start, Vec3 delta) {
     const Aabb from = Aabb::New(start - half, start + half);
@@ -68,7 +70,11 @@ std::optional<SweepHit> SweepBoxes(const std::vector<Aabb>& boxes, Vec3 half, Ve
     return best;
 }
 
-} // namespace
+bool OverlapsBoxes(const std::vector<Aabb>& boxes, const Aabb& region) {
+    for (const Aabb& b : boxes)
+        if (b.Overlaps(region)) return true;
+    return false;
+}
 
 std::optional<SweepHit> BoxWorld::Sweep(Vec3 half, Vec3 start, Vec3 delta) const {
     const Aabb a = Aabb::New(start - half, start + half);
@@ -82,9 +88,7 @@ std::optional<SweepHit> BoxWorld::Sweep(Vec3 half, Vec3 start, Vec3 delta) const
 }
 
 bool BoxWorld::Overlaps(const Aabb& region) const {
-    for (const Aabb& b : boxes)
-        if (b.Overlaps(region)) return true;
-    return false;
+    return OverlapsBoxes(boxes, region);
 }
 
 } // namespace runline
