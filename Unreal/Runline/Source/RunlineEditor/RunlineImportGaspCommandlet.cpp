@@ -91,7 +91,13 @@ int32 URunlineImportGaspCommandlet::Main(const FString& Params)
 		const bool bLoop = Which == ERunlineAnimSlot::Walk || Which == ERunlineAnimSlot::Run || Which == ERunlineAnimSlot::Sprint || Which == ERunlineAnimSlot::CrouchWalk;
 		Def.AuthoredSpeed = bLoop ? float(Speed) : 0.0f;
 		Def.HoldAt = F.Num() > 2 && !F[2].IsEmpty() ? FCString::Atof(*F[2]) : 0.0f;
-		Def.bStandIn = F.Num() > 3 && F[3].TrimStartAndEnd() == TEXT("standin");
+		// Flags: standin and/or anchor, joined with |.
+		TArray<FString> Flags;
+		if (F.Num() > 3) F[3].ParseIntoArray(Flags, TEXT("|"), true);
+		Def.bStandIn = Flags.Contains(TEXT("standin"));
+		Def.bAnchorPelvis = Flags.Contains(TEXT("anchor"));
+		Def.From = F.Num() > 4 && !F[4].IsEmpty() ? FCString::Atof(*F[4]) : 0.0f;
+		Def.To = F.Num() > 5 && !F[5].IsEmpty() ? FCString::Atof(*F[5]) : 0.0f;
 	}
 	Set->MarkPackageDirty();
 	{

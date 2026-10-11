@@ -48,7 +48,11 @@ bool FRunlineRunnerBodyTracksEye::RunTest(const FString&)
 {
 	FRunlineTestWorld TW;
 	TW.AddBox(runline::Aabb::New({-50.0f, -1.0f, -50.0f}, {50.0f, 0.0f, 50.0f}), 0);
+	// The ABP_Unarmed body (a standing Manny) drops with the eye; the GASP body crouches by itself
+	// (Runline.Runner.GaspBodyStandsOnHerFeet).
+	ARunlineRunner::bIgnoreAnimSetForTests = true;
 	ARunlineRunner* R = TW.World->SpawnActor<ARunlineRunner>();
+	ARunlineRunner::bIgnoreAnimSetForTests = false;
 	R->Runline().SpawnAt({0.0f, 0.0f, 0.0f}, 0.0f);
 	R->Runline().PressCrouch();
 	R->Runline().SetCrouchHeld(true);
@@ -191,6 +195,30 @@ bool FRunlineRunnerFallback::RunTest(const FString&)
 	ARunlineRunner* R = TW.World->SpawnActor<ARunlineRunner>();
 	ARunlineRunner::bIgnoreAnimSetForTests = false;
 	TestTrue(TEXT("ABP_Unarmed"), R->GetMesh()->GetAnimClass() && R->GetMesh()->GetAnimClass()->GetName().Contains(TEXT("ABP_Unarmed")));
+	return true;
+}
+
+// Pose-capture finding (M3b Task 7): the GASP clips crouch and slide by themselves, so the GASP
+// body stays on her feet when her eye drops (lowering it too sank her into the floor).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineRunnerGaspFeet, "Runline.Runner.GaspBodyStandsOnHerFeet",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineRunnerGaspFeet::RunTest(const FString&)
+{
+	FRunlineTestWorld TW;
+	TW.AddBox(runline::Aabb::New({-50.0f, -1.0f, -50.0f}, {50.0f, 0.0f, 50.0f}), 0);
+	ARunlineRunner* R = TW.World->SpawnActor<ARunlineRunner>();
+	if (!R->GetMesh()->GetAnimClass() || !R->GetMesh()->GetAnimClass()->IsChildOf(URunlineBodyAnimInstance::StaticClass()))
+	{
+		AddWarning(TEXT("No GASP clips: skipped"));
+		return true;
+	}
+	R->Runline().SpawnAt({0.0f, 0.0f, 0.0f}, 0.0f);
+	R->Runline().PressCrouch();
+	R->Runline().SetCrouchHeld(true);
+	for (int32 I = 0; I < 60; ++I) R->Runline().Advance(1.0f / 60.0f);
+	R->UpdateBodyPlacement();
+	TestTrue(TEXT("crouched"), R->Runline().Core().crouched);
+	TestEqual(TEXT("the body's root is at her feet"), R->GetMesh()->GetComponentLocation().Z, RunlineUnits::ToUnrealPosition(R->Runline().Core().feet).Z, 0.5);
 	return true;
 }
 

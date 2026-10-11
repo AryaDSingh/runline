@@ -166,6 +166,10 @@ bool FRunlineBodyStandIns::RunTest(const FString&)
 	FRunlineBodyChooser C = Chooser();
 	const FRunlineBodyPose Hang = Settle(C, In(runline::LedgeHang{{0.0f, 0.0f, 1.0f}, 2.0f, false}));
 	TestEqual(TEXT("hang held at 35%"), Layer(Hang, ERunlineAnimSlot::Hang).Time, 0.35f, 1e-4f);
+	// Pose-capture finding (M3b Task 7): the hang stand-in brings the copied first-person hands through the
+	// camera (a mangled, oversized hand): the arms hide while it plays; elsewhere they show.
+	TestTrue(TEXT("hang stand-in hides the first-person arms"), Hang.bHideArms);
+	TestFalse(TEXT("running shows them"), Settle(C, In(runline::Ground{}, 4.0f)).bHideArms);
 	FRunlineBodyInput W = In(runline::WallRun{{-1.0f, 0.0f, 0.0f}, 0.3f}, 6.0f);   // wall on her right (core yaw 0)
 	W.WallNormal = {-1.0f, 0.0f, 0.0f};
 	const FRunlineBodyPose Run = Settle(C, W);

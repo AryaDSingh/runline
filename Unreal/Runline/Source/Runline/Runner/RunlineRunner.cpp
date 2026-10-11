@@ -86,7 +86,7 @@ void ARunlineRunner::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
 	// Bones hidden in the constructor don't stick (the mesh isn't registered yet).
-	LegsMesh->HideBoneByName(TEXT("spine_03"), PBO_None);
+	LegsMesh->HideBoneByName(TEXT("spine_02"), PBO_None);
 	// The GASP body when its clips are imported (scripts/import-gasp.ps1); a fresh clone keeps
 	// ABP_Unarmed.
 	const URunlineAnimSet* Set = bIgnoreAnimSetForTests ? nullptr : URunlineAnimSet::Get();
@@ -125,7 +125,10 @@ void ARunlineRunner::Tick(float DeltaSeconds)
 	Camera->SetFieldOfView(M.GetRenderFov());
 	UpdateBodyPlacement();
 	if (URunlineBodyAnimInstance* Body = Cast<URunlineBodyAnimInstance>(GetMesh()->GetAnimInstance()))
+	{
 		Body->SetInput(FRunlineBodyInput::From(M, DeltaSeconds * M.GameSpeed));   // game seconds, like the core
+		FirstPersonMesh->SetVisibility(!Body->GetPose().bHideArms);
+	}
 	if (AController* C = GetController()) C->SetControlRotation(M.GetRenderRotation());
 	UpdateCourse(DeltaSeconds);
 }
@@ -161,10 +164,12 @@ void ARunlineRunner::UpdateBodyPlacement()
 {
 	// The body turns with the view (her yaw) and stands on her feet, whatever the capsule's height.
 	SetActorRotation(FRotator(0.0, Runline().GetRenderRotation().Yaw, 0.0));
-	// Her eye drops when she crouches or slides; the body (a standing Manny) drops with it, so the
-	// arms stay at the eye.
+	// Her eye drops when she crouches or slides. ABP_Unarmed's body (a standing Manny) drops with it,
+	// so the arms stay at the eye; the GASP body's clips crouch and slide by themselves (M3b), so it
+	// stays on her feet.
 	const runline::Controller& C = Runline().Core();
-	const float EyeDrop = (C.GetView().eye.y - C.feet.y) - (C.tuning.standHeight - C.tuning.eyeFromTop);
+	const bool bGasp = Cast<URunlineBodyAnimInstance>(GetMesh()->GetAnimInstance()) != nullptr;
+	const float EyeDrop = bGasp ? 0.0f : (C.GetView().eye.y - C.feet.y) - (C.tuning.standHeight - C.tuning.eyeFromTop);
 	// And it moves with the rendered (interpolated) eye, not the capsule's 60 Hz steps, so the arms
 	// don't hop against a camera that glides between steps (spec: camera and arms interpolated).
 	const FVector Smoothing = Runline().GetRenderBaseEye() - RunlineUnits::ToUnrealPosition(C.GetView().eye);

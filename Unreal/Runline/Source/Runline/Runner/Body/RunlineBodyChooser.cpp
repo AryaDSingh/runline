@@ -292,6 +292,7 @@ FRunlineBodyPose FRunlineBodyChooser::Choose(const FRunlineBodyInput& In)
 	if (Total > 0.0f)
 		for (FRunlineBodyLayer& L : Out.Layers) L.Weight /= Total;
 
+	Out.bHideArms = std::holds_alternative<runline::LedgeHang>(In.State) || std::holds_alternative<runline::GrabTransfer>(In.State);
 	// The wallrun stand-in leans away from the wall: her right is (cos yaw, 0, -sin yaw) (core).
 	if (const auto* W = std::get_if<runline::WallRun>(&In.State))
 	{

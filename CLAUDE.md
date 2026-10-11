@@ -18,6 +18,11 @@ Spec: docs/superpowers/specs/2026-10-09-faith-movement-port-design.md
   `'/Engine/Maps/Entry?game=/Script/Runline.RunlineRunGameMode?course=greybox'`. Dev URL options: `?shot=20`
   (screenshot after 20 s, then quit), `?autorun=1`, `?pitch=-60`, `?menu=1`. The game window takes keyboard focus,
   so type nothing meanwhile.
+- `powershell -ExecutionPolicy Bypass -File scripts/import-gasp.ps1 [-Gasp D:\GameAnimationSample]`: imports the
+  GASP clips listed in Data/Animation/gasp-clips.txt (slot, clip, flags, move window) into the git-ignored
+  Content/ThirdParty/GASP and fills DA_RunlineAnimSet. Without them the body runs ABP_Unarmed. Dev URL options
+  `?poses=1` (every core state, her view and a side view, to Saved/Screenshots/.../Poses, then quits) and
+  `?scan=Roll,Vault` (side views across each clip, for finding move windows).
 - Golden data: `cargo run --release` in tools/golden (needs the reference clone at
   ../faith-runner). It rewrites RunlineCore/tests/golden/*.csv, Unreal/Runline/Data/Levels/*.csv and REFERENCE (the faith-runner
   commit used; currently 9470d755). Regenerate only from a clean checkout, and commit all three.

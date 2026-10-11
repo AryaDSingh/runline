@@ -49,7 +49,7 @@ public:
 	/// Checkpoints and the time trial for one frame of DeltaSeconds (Tick).
 	void UpdateCourse(float DeltaSeconds);
 	int32 CurrentCheckpoint() const { return Checkpoint; }
-	/// Her legs (M3b): a Manny copying the body's pose, everything from spine_03 up hidden.
+	/// Her legs (M3b): a Manny copying the body's pose, everything from spine_02 up hidden.
 	USkeletalMeshComponent* GetLegsMesh() const { return LegsMesh; }
 	/// Test hook: spawn as if the GASP clips weren't imported (a fresh clone).
 	static bool bIgnoreAnimSetForTests;

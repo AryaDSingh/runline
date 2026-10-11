@@ -62,6 +62,8 @@ struct FRunlineBodyPose
 	TArray<FRunlineBodyLayer, TInlineAllocator<8>> Layers;
 	/// Degrees about her forward axis, positive to her right.
 	float LeanDegrees = 0.0f;
+	/// Hide the first-person arms: the hang stand-in brings the copied hands through the camera.
+	bool bHideArms = false;
 };
 
 /// M3b: which GASP clips the body plays, where in them, and how much (spec 2026-10-11-m3b §4). The

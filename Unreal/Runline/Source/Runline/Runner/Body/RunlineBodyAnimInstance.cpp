@@ -16,6 +16,7 @@ void URunlineBodyAnimInstance::LoadClips()
 	const int32 Count = int32(ERunlineAnimSlot::Count);
 	Sequences.SetNum(Count);
 	Infos.SetNum(Count);
+	Anchors.Init(false, Count);
 	if (const URunlineAnimSet* Set = URunlineAnimSet::Get())
 	{
 		for (int32 I = 0; I < FMath::Min(Count, Set->Slots.Num()); ++I)
@@ -30,6 +31,7 @@ void URunlineBodyAnimInstance::LoadClips()
 			Info.From = Def.From;
 			Info.To = Def.To;
 			Info.bLoaded = Seq != nullptr;
+			Anchors[I] = Def.bAnchorPelvis;
 		}
 	}
 	Chooser.Clips = [this](ERunlineAnimSlot Slot) { return Infos.IsValidIndex(int32(Slot)) ? Infos[int32(Slot)] : FRunlineClipInfo{}; };
@@ -46,6 +48,12 @@ void URunlineBodyAnimInstance::SetInput(const FRunlineBodyInput& In)
 {
 	LoadClips();
 	Pose = Chooser.Choose(In);
+	if (DevOverride)
+	{
+		Pose.Layers = {*DevOverride};
+		Pose.LeanDegrees = 0.0f;
+		Pose.bHideArms = false;
+	}
 }
 
 void FRunlineBodyProxy::PreUpdate(UAnimInstance* Instance, float DeltaSeconds)
@@ -55,8 +63,23 @@ void FRunlineBodyProxy::PreUpdate(UAnimInstance* Instance, float DeltaSeconds)
 	Layers.Reset();
 	for (const FRunlineBodyLayer& L : A->Pose.Layers)
 		if (A->Sequences.IsValidIndex(int32(L.Slot)) && A->Sequences[int32(L.Slot)] && L.Weight > 0.0f)
-			Layers.Add({A->Sequences[int32(L.Slot)], L.Time, L.Weight});
+			Layers.Add({A->Sequences[int32(L.Slot)], L.Time, L.Weight, A->Anchors.IsValidIndex(int32(L.Slot)) && A->Anchors[int32(L.Slot)]});
 	Lean = A->Pose.LeanDegrees;
+}
+
+namespace
+{
+	/// An anchored clip: its pelvis back at the reference (standing) height.
+	void AnchorPelvis(FCompactPose& Pose)
+	{
+		const FBoneContainer& Bones = Pose.GetBoneContainer();
+		const int32 Mesh = Bones.GetPoseBoneIndexForBoneName(TEXT("pelvis"));
+		if (Mesh == INDEX_NONE) return;
+		const FCompactPoseBoneIndex Pelvis = Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(Mesh));
+		FVector T = Pose[Pelvis].GetTranslation();
+		T.Z = Bones.GetRefPoseTransform(Pelvis).GetTranslation().Z;
+		Pose[Pelvis].SetTranslation(T);
+	}
 }
 
 bool FRunlineBodyProxy::Evaluate(FPoseContext& Output)
@@ -70,6 +93,7 @@ bool FRunlineBodyProxy::Evaluate(FPoseContext& Output)
 	{
 		FAnimationPoseData Data(Output);
 		Layers[0].Seq->GetAnimationPose(Data, FAnimExtractContext(double(Layers[0].Time)));
+		if (Layers[0].bAnchor) AnchorPelvis(Output.Pose);
 	}
 	else
 	{
@@ -87,6 +111,7 @@ bool FRunlineBodyProxy::Evaluate(FPoseContext& Output)
 			Curves[I].InitFrom(Output.Curve);
 			FAnimationPoseData Data(Poses[I], Curves[I], Attributes[I]);
 			Layers[I].Seq->GetAnimationPose(Data, FAnimExtractContext(double(Layers[I].Time)));
+			if (Layers[I].bAnchor) AnchorPelvis(Poses[I]);
 			Weights.Add(Layers[I].Weight);
 		}
 		FAnimationPoseData Out(Output);

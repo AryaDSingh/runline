@@ -26,6 +26,7 @@ private:
 		const UAnimSequence* Seq = nullptr;
 		float Time = 0.0f;
 		float Weight = 0.0f;
+		bool bAnchor = false;
 	};
 	TArray<FLayer, TInlineAllocator<8>> Layers;
 	float Lean = 0.0f;
@@ -45,6 +46,10 @@ public:
 	bool HasClips() const;
 	const FRunlineBodyChooser& GetChooser() const { return Chooser; }
 	const FRunlineBodyPose& GetPose() const { return Pose; }
+	/// Dev only (?scan=): play this one clip at this time, whatever the core says.
+	TOptional<FRunlineBodyLayer> DevOverride;
+	/// A slot's clip length (0: missing).
+	float ClipLength(ERunlineAnimSlot Slot) const { return Infos.IsValidIndex(int32(Slot)) ? Infos[int32(Slot)].Length : 0.0f; }
 
 protected:
 	virtual void NativeInitializeAnimation() override;
@@ -57,6 +62,7 @@ private:
 	/// By slot; null where the clip is missing.
 	UPROPERTY() TArray<TObjectPtr<UAnimSequence>> Sequences;
 	TArray<FRunlineClipInfo> Infos;
+	TArray<bool> Anchors;
 	FRunlineBodyChooser Chooser;
 	FRunlineBodyPose Pose;
 

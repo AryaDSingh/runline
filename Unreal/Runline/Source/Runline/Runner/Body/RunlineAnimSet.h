@@ -35,6 +35,9 @@ struct FRunlineAnimSlotDef
 	UPROPERTY(EditAnywhere, Category = "Anim") float HoldAt = 0.0f;
 	/// A stand-in for a move GASP has no clip for (M3c replaces these).
 	UPROPERTY(EditAnywhere, Category = "Anim") bool bStandIn = false;
+	/// An airborne clip carrying the jump's height in its pelvis (the root stays on the ground): the
+	/// pelvis is held at its standing height, since the core already moves her through the arc.
+	UPROPERTY(EditAnywhere, Category = "Anim") bool bAnchorPelvis = false;
 };
 
 /// The body's clips, one per slot (made by scripts/import-gasp.ps1; edit in the editor to try

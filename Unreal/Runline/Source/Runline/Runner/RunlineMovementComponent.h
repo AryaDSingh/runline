@@ -77,6 +77,9 @@ public:
 	float GetStepAlpha() const { return Accumulator / StepSeconds; }
 	/// How many times the view has been cut (spawn, respawn, death): a change means don't blend.
 	int32 GetSnapCount() const { return SnapCount; }
+	/// Dev only (?poses=1): no steps run; the next frame's events are DevEvents instead.
+	bool bFrozen = false;
+	TArray<runline::Event> DevEvents;
 
 	/// Called after every step with the controller and the input it took (events, audio, tests).
 	TFunction<void(const runline::Controller&, const runline::Input&)> OnStep;

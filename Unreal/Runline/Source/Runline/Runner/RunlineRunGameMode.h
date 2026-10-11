@@ -9,7 +9,8 @@
 /// `?shot=<seconds>` takes a screenshot (Saved/Screenshots) that long after the start and quits:
 /// for checking the look without anyone at the keyboard. `?menu=1` opens the pause menu at the start
 /// (with ?shot, to check the menu's look). `?autorun=1` holds forward from the start (screenshots of
-/// the run: bob, FOV, tilt).
+/// the run: bob, FOV, tilt). `?poses=1` puts her in every core state in turn and screenshots each, her
+/// view and a side view, to Saved/Screenshots/Poses (M3b: checking the body animation), then quits.
 UCLASS()
 class RUNLINE_API ARunlineRunGameMode : public AGameModeBase
 {
@@ -30,4 +31,9 @@ private:
 	bool bAutorun = false;
 	/// ?pitch=<degrees>: look up (+) or down (-) at the start (screenshots of the arms and body).
 	float StartPitchDeg = 0.0f;
+	bool bPoses = false;
+	void StartPoses();
+	/// ?scan=Slot,Slot: side views across each slot's clip (finding move windows), then quits.
+	FString ScanSlots;
+	void StartScan();
 };

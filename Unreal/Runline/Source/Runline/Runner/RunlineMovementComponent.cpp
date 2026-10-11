@@ -185,6 +185,12 @@ void URunlineMovementComponent::StepOnce()
 void URunlineMovementComponent::Advance(float DeltaSeconds)
 {
 	FrameEvents.Reset();
+	if (bFrozen)
+	{
+		FrameEvents = MoveTemp(DevEvents);
+		DevEvents.Reset();
+		return;
+	}
 	Accumulator += DeltaSeconds * GameSpeed;
 	int32 N = FMath::FloorToInt(Accumulator / StepSeconds);
 	if (N > MaxStepsPerFrame)

@@ -8,6 +8,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "Animation/Skeleton.h"
+#include "AnimationRuntime.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -70,7 +71,7 @@ bool FRunlineBodyAnimSet::RunTest(const FString&)
 	return true;
 }
 
-// The real clips on the real mesh: a vault half way through shows the vault clip's half-way pose,
+// The real clips on the real mesh: a vault half way through shows the vault's half-way pose,
 // and with no input the body stands in the idle clip's first frame (never the reference T-pose).
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineBodyOnMesh, "Runline.Body.ClipsOnTheMesh",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -102,7 +103,10 @@ bool FRunlineBodyOnMesh::RunTest(const FString&)
 	// The clip's own hand at half way, built up from the pelvis (the root is locked in place).
 	const FReferenceSkeleton& Ref = Mesh->GetSkeletalMeshAsset()->GetRefSkeleton();
 	const int32 Pelvis = Mesh->GetBoneIndex(TEXT("pelvis"));
-	const FAnimExtractContext Half(double(Vault->GetPlayLength()) * 0.5);
+	// Half way through the move is half way through the clip's move window (anim set From..To).
+	const FRunlineAnimSlotDef& Def = URunlineAnimSet::Get()->Slots[int32(ERunlineAnimSlot::Vault)];
+	const double End = Def.To > 0.0f ? Def.To : Vault->GetPlayLength();
+	const FAnimExtractContext Half(Def.From + (End - Def.From) * 0.5);
 	FTransform Want = FTransform::Identity;
 	for (int32 B = Hand; B != INDEX_NONE && B != Ref.GetParentIndex(Pelvis); B = Ref.GetParentIndex(B))
 	{
@@ -114,6 +118,40 @@ bool FRunlineBodyOnMesh::RunTest(const FString&)
 	const FVector Got = Root.InverseTransformPosition(Mesh->GetBoneTransform(Hand, FTransform::Identity).GetLocation());
 	AddInfo(FString::Printf(TEXT("hand: got %s, clip %s"), *Got.ToString(), *Want.GetLocation().ToString()));
 	TestTrue(TEXT("the vault's half-way hand"), Got.Equals(Want.GetLocation(), 1.0));
+	return true;
+}
+
+// Airborne clips (jump starts, fall) are anchored: the pelvis stays at its standing height, because
+// the core already moves her through the jump's arc and a clip's own lift would add to it.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineBodyAnchored, "Runline.Body.AirborneClipsKeepThePelvis",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineBodyAnchored::RunTest(const FString&)
+{
+	if (!Clip(TEXT("Fall"))) { AddWarning(TEXT("No GASP clips imported: skipped")); return true; }
+	TestTrue(TEXT("Fall is anchored in the anim set"), URunlineAnimSet::Get()->Slots[int32(ERunlineAnimSlot::Fall)].bAnchorPelvis);
+	FRunlineTestWorld TW;
+	AActor* A = TW.World->SpawnActor<AActor>();
+	USkeletalMeshComponent* Mesh = NewObject<USkeletalMeshComponent>(A);
+	A->SetRootComponent(Mesh);
+	Mesh->SetSkeletalMesh(LoadObject<USkeletalMesh>(nullptr, TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple")));
+	Mesh->SetAnimInstanceClass(URunlineBodyAnimInstance::StaticClass());
+	Mesh->RegisterComponent();
+	URunlineBodyAnimInstance* Anim = Cast<URunlineBodyAnimInstance>(Mesh->GetAnimInstance());
+	const int32 Pelvis = Mesh->GetBoneIndex(TEXT("pelvis"));
+	const double Standing = FAnimationRuntime::GetComponentSpaceTransformRefPose(Mesh->GetSkeletalMeshAsset()->GetRefSkeleton(), Pelvis).GetLocation().Z;
+	FRunlineBodyInput I;
+	I.State = runline::Air{};
+	I.Dt = 1.0f / 60.0f;
+	I.SnapCount = 1;
+	for (int32 K = 0; K < 30; ++K)
+	{
+		Anim->SetInput(I);
+		Mesh->TickAnimation(0.0f, false);
+		Mesh->RefreshBoneTransforms();
+		const double Z = Mesh->GetBoneTransform(Pelvis, FTransform::Identity).GetLocation().Z;
+		if (K == 29) AddInfo(FString::Printf(TEXT("pelvis %.1f cm, standing %.1f cm"), Z, Standing));
+		TestEqual(TEXT("the pelvis at its standing height"), Z, Standing, 2.0);
+	}
 	return true;
 }
 
