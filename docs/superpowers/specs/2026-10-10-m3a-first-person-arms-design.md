@@ -1,5 +1,9 @@
 # M3a: first-person arms (design)
 
+> **Shelved 2026-10-11.** Built on branch m3a-arms (not merged); the user found the procedural arms
+> much worse than the template's mocap arms. Superseded by M3b (2026-10-11-m3b-gasp-body-animation-design.md);
+> the contact IK returns in M3c over animation.
+
 Part of M3's feel pass (spec 2026-10-09, section 5). Research behind the choices:
 docs/research/2026-10-10-free-assets.md.
 
