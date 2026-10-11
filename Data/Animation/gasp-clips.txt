@@ -1,4 +1,30 @@
 # Slot,GASP asset (on the UEFN mannequin),hold fraction,standin
 # The clips Runline uses (spec M3b §4). scripts/import-gasp.ps1 retargets each to the UE5 Manny and
 # imports it as /Game/ThirdParty/GASP/A_<Slot> (git-ignored: GASP content stays out of the repo).
+Idle,/Game/Characters/UEFN_Mannequin/Animations/Idle/M_Neutral_Stand_Idle_Loop
+Walk,/Game/Characters/UEFN_Mannequin/Animations/Walk/M_Neutral_Walk_Loop_F
 Run,/Game/Characters/UEFN_Mannequin/Animations/Run/M_Neutral_Run_Loop_F
+Sprint,/Game/Characters/UEFN_Mannequin/Animations/Sprint/M_Neutral_Sprint_Loop_F
+CrouchIdle,/Game/Characters/UEFN_Mannequin/Animations/Idle/M_Neutral_Crouch_Idle_Loop
+CrouchWalk,/Game/Characters/UEFN_Mannequin/Animations/Crouch/M_Neutral_Crouch_Loop_F
+JumpStand,/Game/Characters/UEFN_Mannequin/Animations/Jump/M_Neutral_Jump_F_Start_Stand_Lfoot
+JumpRun,/Game/Characters/UEFN_Mannequin/Animations/Jump/M_Neutral_Jump_F_Start_Run_Lfoot
+JumpSprint,/Game/Characters/UEFN_Mannequin/Animations/Jump/M_Neutral_Jump_F_Start_Sprint_Lfoot
+Fall,/Game/Characters/UEFN_Mannequin/Animations/Jump/M_Neutral_Jump_Loop_Fall
+LandStandLight,/Game/Characters/UEFN_Mannequin/Animations/Jump/M_Neutral_Jump_F_Land_Stand_Light_Lfoot
+LandStandHeavy,/Game/Characters/UEFN_Mannequin/Animations/Jump/M_Neutral_Jump_F_Land_Stand_Heavy_Lfoot
+LandRunLight,/Game/Characters/UEFN_Mannequin/Animations/Jump/M_Neutral_Jump_F_Land_Run_Light_Lfoot
+LandRunHeavy,/Game/Characters/UEFN_Mannequin/Animations/Jump/M_Neutral_Jump_F_Land_Run_Heavy_Lfoot
+LandSprintLight,/Game/Characters/UEFN_Mannequin/Animations/Jump/M_Neutral_Jump_F_Land_Sprint_Light_Lfoot
+LandSprintHeavy,/Game/Characters/UEFN_Mannequin/Animations/Jump/M_Neutral_Jump_F_Land_Sprint_Heavy_Lfoot
+Stumble,/Game/Characters/UEFN_Mannequin/Animations/Jump/M_Neutral_Jump_F_Land_Stumble_Lfoot
+Roll,/Game/Characters/UEFN_Mannequin/Animations/Jump/M_Neutral_Jump_F_Land_Roll_Lfoot
+SlideInto,/Game/Characters/UEFN_Mannequin/Animations/Slide/M_Neutral_Slide_FootOut_Into_Lfoot
+SlideLoop,/Game/Characters/UEFN_Mannequin/Animations/Slide/M_Neutral_Slide_FootOut_Loop
+SlideOut,/Game/Characters/UEFN_Mannequin/Animations/Slide/M_Neutral_Slide_FootOut_Out_Moving_Run
+Vault,/Game/Characters/UEFN_Mannequin/Animations/Traversal/Vault/M_Neutral_Traversal_Vault_1_0_run_F_Lfoot
+Mantle,/Game/Characters/UEFN_Mannequin/Animations/Traversal/Mantle/M_Neutral_Traversal_Mantle_1_0_run_F_Lfoot
+StepUp,/Game/Characters/UEFN_Mannequin/Animations/Traversal/Mantle/M_Neutral_Traversal_Mantle_1_0_stand_F_Lfoot
+PullUp,/Game/Characters/UEFN_Mannequin/Animations/Traversal/Climb/M_Neutral_Traversal_Climb_Start_2_5_stand_F_Lfoot
+Springboard,/Game/Characters/UEFN_Mannequin/Animations/Jump/M_Neutral_Jump_F_Start_Run_Rfoot
+Hang,/Game/Characters/UEFN_Mannequin/Animations/Traversal/Catch/Cliff/M_Neutral_Traversal_Catch_Cliff_high_stand,0.35,standin

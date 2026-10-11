@@ -45,6 +45,7 @@ public class Runline : ModuleRules
 		// RunlineUnits must round the same way in a packaged game as in the tests.
 		FPSemantics = FPSemanticsMode.Precise;
 		PublicIncludePaths.Add("Runline/Runner");
+		PublicIncludePaths.Add("Runline/Runner/Body");
 		// The adapter tests replay the core's traces and goldens.
 		PrivateIncludePaths.Add(Path.Combine(RepoRoot, "RunlineCore", "tests"));
 		PublicDefinitions.Add("RUNLINE_GOLDEN_DIR=\"" + Path.Combine(RepoRoot, "RunlineCore", "tests", "golden").Replace('\\', '/') + "\"");

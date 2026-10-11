@@ -9,6 +9,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "UObject/SavePackage.h"
+#include "RunlineAnimSet.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogRunlineGasp, Log, All);
 
@@ -34,6 +35,14 @@ int32 URunlineImportGaspCommandlet::Main(const FString& Params)
 	if (!Skeleton) { UE_LOG(LogRunlineGasp, Error, TEXT("no SK_Mannequin")); return 1; }
 	TArray<FString> Lines;
 	FFileHelper::LoadFileToStringArray(Lines, *List);
+	// The anim set (committed): one entry per slot, pointing at the git-ignored clips.
+	URunlineAnimSet* Set = URunlineAnimSet::Get();
+	if (!Set)
+	{
+		UPackage* SetPackage = CreatePackage(TEXT("/Game/Runline/Animation/DA_RunlineAnimSet"));
+		Set = NewObject<URunlineAnimSet>(SetPackage, TEXT("DA_RunlineAnimSet"), RF_Public | RF_Standalone);
+	}
+	Set->Slots.SetNum(int32(ERunlineAnimSlot::Count));
 	IAssetTools& Tools = FModuleManager::LoadModuleChecked<FAssetToolsModule>("AssetTools").Get();
 	int32 Failed = 0;
 	for (const FString& Line : Lines)
@@ -75,6 +84,21 @@ int32 URunlineImportGaspCommandlet::Main(const FString& Params)
 		Args.TopLevelFlags = RF_Public | RF_Standalone;
 		UPackage::SavePackage(Package, Seq, *FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension()), Args);
 		UE_LOG(LogRunlineGasp, Display, TEXT("Runline GASP: %s length %.3f speed %.3f"), *Slot, Length, Speed);
+		ERunlineAnimSlot Which;
+		if (!RunlineAnimSlotFromName(Slot, Which)) { UE_LOG(LogRunlineGasp, Error, TEXT("unknown slot %s"), *Slot); ++Failed; continue; }
+		FRunlineAnimSlotDef& Def = Set->Slots[int32(Which)];
+		Def.Clip = TSoftObjectPtr<UAnimSequence>(FSoftObjectPath(Seq));
+		const bool bLoop = Which == ERunlineAnimSlot::Walk || Which == ERunlineAnimSlot::Run || Which == ERunlineAnimSlot::Sprint || Which == ERunlineAnimSlot::CrouchWalk;
+		Def.AuthoredSpeed = bLoop ? float(Speed) : 0.0f;
+		Def.HoldAt = F.Num() > 2 && !F[2].IsEmpty() ? FCString::Atof(*F[2]) : 0.0f;
+		Def.bStandIn = F.Num() > 3 && F[3].TrimStartAndEnd() == TEXT("standin");
+	}
+	Set->MarkPackageDirty();
+	{
+		UPackage* SetPackage = Set->GetOutermost();
+		FSavePackageArgs Args;
+		Args.TopLevelFlags = RF_Public | RF_Standalone;
+		UPackage::SavePackage(SetPackage, Set, *FPackageName::LongPackageNameToFilename(SetPackage->GetName(), FPackageName::GetAssetPackageExtension()), Args);
 	}
 	return Failed == 0 ? 0 : 1;
 }
