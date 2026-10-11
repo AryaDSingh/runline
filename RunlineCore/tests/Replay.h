@@ -223,8 +223,10 @@ inline std::string DiffFx(const trace::Fx& want, const Shot& shot, float swanFor
 
 /// Replays a trace; returns "" if every frame matches, else where and how it first diverged.
 /// `worldFor(i)` gives the World for trace world i (BoxWorld/MeshWorld on the desktop,
-/// FUnrealWorld in Unreal); it is called every frame, so build worlds up front.
-inline std::string Replay(const trace::Trace& t, const std::function<const World&(std::size_t)>& worldFor) {
+/// FUnrealWorld in Unreal); it is called every frame, so build worlds up front. `onStep`, if given,
+/// sees the controller after each step (the arms replay in Unreal).
+inline std::string Replay(const trace::Trace& t, const std::function<const World&(std::size_t)>& worldFor,
+                          const std::function<void(const Controller&, const trace::Frame&)>& onStep = {}) {
     if (!t.defaultTuning) return "uses non-default tuning (not replayable yet)";
     if (t.frames.empty()) return "has no frames";
     // Controller::new at the recorded spawn, then whatever the test set before its first step.
@@ -250,6 +252,7 @@ inline std::string Replay(const trace::Trace& t, const std::function<const World
         } catch (const NotPorted& e) {
             return "frame " + std::to_string(i) + ": reached " + e.what();
         }
+        if (onStep) onStep(c, f);
         std::string d = Diff(f.out, c, f.events);
         if (d.empty() && f.ext) d = DiffExt(*f.ext, c);
         if (d.empty() && f.hid) d = ReplayAccess::Diff(*f.hid, c);

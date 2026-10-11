@@ -501,4 +501,27 @@ bool FRunlineMovementGameSpeed::RunTest(const FString&)
 	return true;
 }
 
+// M3a: the arms see every event of a frame's steps (a hitch runs several), how far the render is
+// past the last step, and when the view was cut.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineMovementArmsFeed, "Runline.Movement.ArmsFeed",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineMovementArmsFeed::RunTest(const FString&)
+{
+	FRunnerWorld W;
+	W.M().Advance(Step);   // settle on the floor
+	W.M().PressJump();
+	W.M().SetJumpHeld(true);
+	W.M().Advance(Step * 3.0f);   // three steps in one frame: the jump is in the first
+	bool bJump = false;
+	for (const runline::Event& E : W.M().GetFrameEvents()) bJump |= E.kind == runline::EventKind::Jump;
+	TestTrue(TEXT("a hitch's events are all kept"), bJump);
+	W.M().Advance(Step * 0.5f);
+	TestEqual(TEXT("no step, no events"), W.M().GetFrameEvents().Num(), 0);
+	TestEqual(TEXT("half way to the next step"), W.M().GetStepAlpha(), 0.5f, 1e-4f);
+	const int32 Snaps = W.M().GetSnapCount();
+	W.M().Respawn();
+	TestEqual(TEXT("a respawn is a snap"), W.M().GetSnapCount(), Snaps + 1);
+	return true;
+}
+
 #endif

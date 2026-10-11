@@ -71,6 +71,12 @@ public:
 	float GetAccumulator() const { return Accumulator; }
 	/// How many times a step reached code the core hasn't ported (and was turned into a respawn).
 	int32 NotPortedCount() const { return NotPorted; }
+	/// Every event of the steps the last Advance ran, in order (the arms; a hitch runs several).
+	const TArray<runline::Event>& GetFrameEvents() const { return FrameEvents; }
+	/// How far the render is between the last step and the next (0..1).
+	float GetStepAlpha() const { return Accumulator / StepSeconds; }
+	/// How many times the view has been cut (spawn, respawn, death): a change means don't blend.
+	int32 GetSnapCount() const { return SnapCount; }
 
 	/// Called after every step with the controller and the input it took (events, audio, tests).
 	TFunction<void(const runline::Controller&, const runline::Input&)> OnStep;
@@ -99,6 +105,8 @@ private:
 	float Accumulator = 0.0f;
 	int64 Steps = 0;
 	int32 NotPorted = 0;
+	TArray<runline::Event> FrameEvents;
+	int32 SnapCount = 0;
 	TSet<FString> NotPortedSeen;
 	// The view at the start of the last step, with the look that step took: the render view
 	// moves from here to the stepped view, so look is never delayed and core turns are smooth.

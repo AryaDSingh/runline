@@ -15,6 +15,7 @@ URunlineMovementComponent::URunlineMovementComponent()
 
 void URunlineMovementComponent::SnapView()
 {
+	++SnapCount;
 	const runline::View V = Controller->GetView();
 	PrevEye = V.eye;
 	PrevYaw = V.yaw;
@@ -151,6 +152,7 @@ void URunlineMovementComponent::StepOnce()
 	{
 		Controller->Step(StepSeconds, In, CoreWorld());
 		RunEffects(In);
+		for (const runline::Event& E : Controller->events) FrameEvents.Add(E);
 		// The look this step took may be one the LookLimiter just pulled back: interpolate from no
 		// further past the limit than she was before the step (no sawtooth against a limit).
 		const runline::LookLimit Lim = runline::LookLimitFor(*Controller);
@@ -182,6 +184,7 @@ void URunlineMovementComponent::StepOnce()
 
 void URunlineMovementComponent::Advance(float DeltaSeconds)
 {
+	FrameEvents.Reset();
 	Accumulator += DeltaSeconds * GameSpeed;
 	int32 N = FMath::FloorToInt(Accumulator / StepSeconds);
 	if (N > MaxStepsPerFrame)
