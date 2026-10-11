@@ -1,0 +1,4 @@
+# Slot,GASP asset (on the UEFN mannequin),hold fraction,standin
+# The clips Runline uses (spec M3b §4). scripts/import-gasp.ps1 retargets each to the UE5 Manny and
+# imports it as /Game/ThirdParty/GASP/A_<Slot> (git-ignored: GASP content stays out of the repo).
+Run,/Game/Characters/UEFN_Mannequin/Animations/Run/M_Neutral_Run_Loop_F

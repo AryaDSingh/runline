@@ -12,3 +12,7 @@ Unreal/Runline/.vs/
 *.sln
 *.slnx
 Unreal/Runline/Content/Runline/Maps/Test_*
+
+# GASP clips (Epic's Game Animation Sample; UE-only content): made by scripts/import-gasp.ps1
+Unreal/Runline/Content/ThirdParty/
+build/gasp-fbx/
