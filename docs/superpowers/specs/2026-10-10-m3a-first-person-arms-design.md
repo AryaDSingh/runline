@@ -61,8 +61,9 @@ Converted to Unreal space only through RunlineUnits.
 
 | Contact | Source |
 |---|---|
-| Ledge lip | `LedgeHang.ledgeY`, `normal` |
-| Hand plant | `Vault.hand` |
+| Ledge lip | `LedgeHang.ledgeY`, `normal` (the wall face is the feet moved `halfWidth` against the normal) |
+| Shimmy | `Controller::shimmy`: `dir`, `t`, `from`, `to`, `corner` |
+| Hand plant | `Vault.hand` is the feet at the plant; the ledge is that point less the VaultType's `handplant` offset (along the move, up) and the 90-unit half height |
 | Wall plane | `WallRun` / `WallClimb` / `WallClimbTurned` `.normal`, plus the feet and the body radius |
 | Ledge to ledge | `GrabTransfer.from`, `to`, `dur` |
 | Top edge | `Traverse.to` (PullUp, Mantle) |
@@ -87,6 +88,7 @@ Camera-space targets are relative to the eye; world-space targets are on contact
 | WallRun | The wall-side hand on the wall plane at shoulder height, sliding along it; the other hand pumps | Wall side from the normal against her facing; a short reach to plant at the start |
 | WallClimb, WallClimbTurned | Hands alternate reaching up the wall plane (phase from the timer) | Turned: both pull off, then into Air |
 | LedgeHang | Both hands on the lip, Grip | About shoulder width apart, either side of the eye's projection onto the lip |
+| LedgeHang with `Controller::shimmy` set | Hands walk along the lip: the leading hand moves first, then the trailing one, timed by the shimmy's `t` | Round a corner (`corner` set): the leading hand goes to the new face |
 | GrabTransfer | One hand reaches from the `from` lip to the `to` lip over `dur`; the other follows | Grip on arrival |
 | Traverse (PullUp, Mantle) | Both hands planted on the top edge, pressing as she rises; released at the end | |
 | Traverse (SpringBoard) | Ready pose, a forward swing at launch | A foot plant, no hand contact |
@@ -99,7 +101,7 @@ Shared rules:
 - Any state without its own behaviour (and the NotPorted guard) holds the ready pose. Never a
   T-pose.
 
-Shimmy is not a core state yet (M4); it gets its behaviour when the core reaches it.
+Shimmy is not a state of its own: the core keeps it in `Controller::shimmy` while in LedgeHang.
 
 ## 5. Edge cases
 
@@ -128,6 +130,6 @@ Shimmy is not a core state yet (M4); it gets its behaviour when the core reaches
 ## 7. Out of scope
 
 - Legs and the visible body (M3b), and any Mixamo or keyed clips (the per-state slot leaves room).
-- Melee and takedowns, ziplines, poles, shimmy (the core doesn't run them yet; M4).
+- Melee and takedowns, ziplines, poles (the core doesn't run them yet; M4).
 - Sound.
 - The environment art pass.
