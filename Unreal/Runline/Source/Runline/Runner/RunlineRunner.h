@@ -25,6 +25,7 @@ public:
 
 	URunlineMovementComponent& Runline() const;
 
+	virtual void PostInitializeComponents() override;
 	virtual void BeginPlay() override;
 	/// Saves the settings and closes the menu (Quit, map change, the runner destroyed).
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
@@ -48,6 +49,10 @@ public:
 	/// Checkpoints and the time trial for one frame of DeltaSeconds (Tick).
 	void UpdateCourse(float DeltaSeconds);
 	int32 CurrentCheckpoint() const { return Checkpoint; }
+	/// Her legs (M3b): a Manny copying the body's pose, everything from spine_03 up hidden.
+	USkeletalMeshComponent* GetLegsMesh() const { return LegsMesh; }
+	/// Test hook: spawn as if the GASP clips weren't imported (a fresh clone).
+	static bool bIgnoreAnimSetForTests;
 
 private:
 	void BuildInput();
@@ -72,6 +77,9 @@ private:
 	/// From Mesh uses the attached parent), so they hang off the body, which turns with the view.
 	UPROPERTY(VisibleAnywhere, Category = "Runline")
 	TObjectPtr<class USkeletalMeshComponent> FirstPersonMesh;
+	/// What she sees of her body looking down: hips and legs (the body itself is hidden from her).
+	UPROPERTY(VisibleAnywhere, Category = "Runline")
+	TObjectPtr<class USkeletalMeshComponent> LegsMesh;
 	UPROPERTY() TObjectPtr<UInputMappingContext> Mapping;
 	UPROPERTY() TObjectPtr<UInputAction> MoveAction;
 	UPROPERTY() TObjectPtr<UInputAction> PadMoveAction;

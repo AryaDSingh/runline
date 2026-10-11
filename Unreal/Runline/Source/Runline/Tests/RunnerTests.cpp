@@ -7,6 +7,9 @@
 #include "RunlineMovementComponent.h"
 #include "RunlineCourseActors.h"
 #include "RunlineCourseData.h"
+#include "RunlineAnimSet.h"
+#include "RunlineBodyAnimInstance.h"
+#include "Animation/AnimSequence.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -29,7 +32,8 @@ bool FRunlineRunnerArms::RunTest(const FString&)
 	if (!Arms) return false;
 	TestNotNull(TEXT("body mesh loaded"), R->GetMesh()->GetSkeletalMeshAsset());
 	TestNotNull(TEXT("arms mesh loaded"), Arms->GetSkeletalMeshAsset());
-	TestTrue(TEXT("body runs ABP_Unarmed"), R->GetMesh()->GetAnimClass() && R->GetMesh()->GetAnimClass()->GetName().Contains(TEXT("ABP_Unarmed")));
+	// ABP_Unarmed, or (M3b) the GASP body when its clips are imported.
+	TestTrue(TEXT("body runs ABP_Unarmed or the GASP body"), R->GetMesh()->GetAnimClass() && (R->GetMesh()->GetAnimClass()->GetName().Contains(TEXT("ABP_Unarmed")) || R->GetMesh()->GetAnimClass()->IsChildOf(URunlineBodyAnimInstance::StaticClass())));
 	TestTrue(TEXT("arms run ABP_FP_Copy"), Arms->GetAnimClass() && Arms->GetAnimClass()->GetName().Contains(TEXT("ABP_FP_Copy")));
 	TestTrue(TEXT("arms hang off the body"), Arms->GetAttachParent() == R->GetMesh());
 	TestTrue(TEXT("she doesn't see the body"), R->GetMesh()->bOwnerNoSee);
@@ -153,6 +157,40 @@ bool FRunlineRunnerTrialAgain::RunTest(const FString&)
 	// faith-runner's number keys: 3 puts her at the third checkpoint.
 	R->RespawnAt(2);
 	TestTrue(TEXT("key 3: checkpoint 3"), R->Runline().Core().feet == Data.Checkpoints[2].Spawn);
+	return true;
+}
+
+// M3b: with the GASP clips the body runs the native anim instance; the legs mesh copies it, only
+// she sees it, it casts no shadow, and everything from spine_03 up is hidden.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineRunnerBody, "Runline.Runner.BodyAndLegs",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineRunnerBody::RunTest(const FString&)
+{
+	FRunlineTestWorld TW;
+	ARunlineRunner* R = TW.World->SpawnActor<ARunlineRunner>();
+	USkeletalMeshComponent* Legs = R->GetLegsMesh();
+	TestNotNull(TEXT("legs"), Legs);
+	if (!Legs) return false;
+	TestTrue(TEXT("only she sees the legs"), Legs->bOnlyOwnerSee);
+	TestFalse(TEXT("no shadow from the legs"), Legs->CastShadow);
+	TestTrue(TEXT("the legs copy the body"), Legs->GetAttachParent() == R->GetMesh() && Legs->GetAnimClass() && Legs->GetAnimClass()->GetName().Contains(TEXT("ABP_FP_Copy")));
+	TestTrue(TEXT("no torso, arms or head on the legs"), Legs->IsBoneHiddenByName(TEXT("spine_03")));
+	const bool bClips = URunlineAnimSet::Get() && LoadObject<UAnimSequence>(nullptr, TEXT("/Game/ThirdParty/GASP/A_Run.A_Run"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	if (!bClips) { AddWarning(TEXT("No GASP clips: the GASP half of this test skipped")); return true; }
+	TestTrue(TEXT("the body runs the GASP anim instance"), R->GetMesh()->GetAnimInstance() && R->GetMesh()->GetAnimInstance()->IsA<URunlineBodyAnimInstance>());
+	return true;
+}
+
+// Review Focus 1: no clips, no anim set: the body keeps ABP_Unarmed (a fresh clone).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineRunnerFallback, "Runline.Body.FallsBackWithoutClips",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineRunnerFallback::RunTest(const FString&)
+{
+	FRunlineTestWorld TW;
+	ARunlineRunner::bIgnoreAnimSetForTests = true;
+	ARunlineRunner* R = TW.World->SpawnActor<ARunlineRunner>();
+	ARunlineRunner::bIgnoreAnimSetForTests = false;
+	TestTrue(TEXT("ABP_Unarmed"), R->GetMesh()->GetAnimClass() && R->GetMesh()->GetAnimClass()->GetName().Contains(TEXT("ABP_Unarmed")));
 	return true;
 }
 

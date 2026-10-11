@@ -18,6 +18,8 @@
 #include "RunlineRunGameMode.h"
 #include "RunlineSettings.h"
 #include "RunlineUnits.h"
+#include "RunlineAnimSet.h"
+#include "RunlineBodyAnimInstance.h"
 #include "SRunlineMenu.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Text/STextBlock.h"
@@ -49,9 +51,10 @@ ARunlineRunner::ARunlineRunner(const FObjectInitializer& OI)
 	Camera->bEnableFirstPersonScale = true;
 	Camera->FirstPersonScale = 0.6f;
 
-	// The template's Manny: the body (seen by others and in shadows, not by her) runs ABP_Unarmed,
+	// The template's Manny: the body (seen by others and in shadows, not by her) plays the GASP clips
+	// by the core's state (URunlineBodyAnimInstance, M3b) when they're imported, else ABP_Unarmed,
 	// which reads the movement component's velocity, acceleration and IsFalling (kept in step with
-	// the core); the arms copy its pose.
+	// the core). The arms and the legs copy its pose.
 	static ConstructorHelpers::FObjectFinder<USkeletalMesh> Manny(TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple"));
 	static ConstructorHelpers::FClassFinder<UAnimInstance> BodyAnim(TEXT("/Game/Characters/Mannequins/Anims/Unarmed/ABP_Unarmed"));
 	static ConstructorHelpers::FClassFinder<UAnimInstance> ArmsAnim(TEXT("/Game/FirstPerson/Anims/ABP_FP_Copy"));
@@ -68,6 +71,27 @@ ARunlineRunner::ARunlineRunner(const FObjectInitializer& OI)
 	FirstPersonMesh->SetOnlyOwnerSee(true);
 	FirstPersonMesh->FirstPersonPrimitiveType = EFirstPersonPrimitiveType::FirstPerson;
 	FirstPersonMesh->SetCollisionProfileName(FName("NoCollision"));
+	LegsMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("LegsMesh"));
+	LegsMesh->SetupAttachment(Body);
+	LegsMesh->SetSkeletalMesh(Manny.Object);
+	LegsMesh->SetAnimInstanceClass(ArmsAnim.Class);
+	LegsMesh->SetOnlyOwnerSee(true);
+	LegsMesh->SetCastShadow(false);   // the body casts her shadow
+	LegsMesh->SetCollisionProfileName(FName("NoCollision"));
+}
+
+bool ARunlineRunner::bIgnoreAnimSetForTests = false;
+
+void ARunlineRunner::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+	// Bones hidden in the constructor don't stick (the mesh isn't registered yet).
+	LegsMesh->HideBoneByName(TEXT("spine_03"), PBO_None);
+	// The GASP body when its clips are imported (scripts/import-gasp.ps1); a fresh clone keeps
+	// ABP_Unarmed.
+	const URunlineAnimSet* Set = bIgnoreAnimSetForTests ? nullptr : URunlineAnimSet::Get();
+	const auto Loads = [Set](ERunlineAnimSlot Slot) { return Set && Set->Slots.IsValidIndex(int32(Slot)) && !Set->Slots[int32(Slot)].Clip.IsNull() && Set->Slots[int32(Slot)].Clip.LoadSynchronous(); };
+	if (Loads(ERunlineAnimSlot::Idle) && Loads(ERunlineAnimSlot::Run)) GetMesh()->SetAnimInstanceClass(URunlineBodyAnimInstance::StaticClass());
 }
 
 URunlineMovementComponent& ARunlineRunner::Runline() const
@@ -79,6 +103,8 @@ void ARunlineRunner::BeginPlay()
 {
 	Super::BeginPlay();
 	AddTickPrerequisiteComponent(GetCharacterMovement());
+	// The body evaluates after the runner has given it this frame's input.
+	GetMesh()->PrimaryComponentTick.AddPrerequisite(this, PrimaryActorTick);
 	FindCourse();
 }
 
@@ -98,6 +124,8 @@ void ARunlineRunner::Tick(float DeltaSeconds)
 	Camera->SetWorldLocationAndRotation(M.GetRenderEye(), M.GetRenderRotation());
 	Camera->SetFieldOfView(M.GetRenderFov());
 	UpdateBodyPlacement();
+	if (URunlineBodyAnimInstance* Body = Cast<URunlineBodyAnimInstance>(GetMesh()->GetAnimInstance()))
+		Body->SetInput(FRunlineBodyInput::From(M, DeltaSeconds * M.GameSpeed));   // game seconds, like the core
 	if (AController* C = GetController()) C->SetControlRotation(M.GetRenderRotation());
 	UpdateCourse(DeltaSeconds);
 }
