@@ -51,8 +51,9 @@ public:
 	int32 CurrentCheckpoint() const { return Checkpoint; }
 	/// Her legs (M3b): a Manny copying the body's pose, everything from spine_02 up hidden.
 	USkeletalMeshComponent* GetLegsMesh() const { return LegsMesh; }
-	/// Test hook: spawn as if the GASP clips weren't imported (a fresh clone).
-	static bool bIgnoreAnimSetForTests;
+	/// Test hook: spawn with this anim set instead of DA_RunlineAnimSet (e.g. one whose clips are missing:
+	/// a fresh clone).
+	static TObjectPtr<class URunlineAnimSet> AnimSetForTests;
 
 private:
 	void BuildInput();

@@ -50,9 +50,9 @@ bool FRunlineRunnerBodyTracksEye::RunTest(const FString&)
 	TW.AddBox(runline::Aabb::New({-50.0f, -1.0f, -50.0f}, {50.0f, 0.0f, 50.0f}), 0);
 	// The ABP_Unarmed body (a standing Manny) drops with the eye; the GASP body crouches by itself
 	// (Runline.Runner.GaspBodyStandsOnHerFeet).
-	ARunlineRunner::bIgnoreAnimSetForTests = true;
+	ARunlineRunner::AnimSetForTests = NewObject<URunlineAnimSet>();   // empty: no GASP clips
 	ARunlineRunner* R = TW.World->SpawnActor<ARunlineRunner>();
-	ARunlineRunner::bIgnoreAnimSetForTests = false;
+	ARunlineRunner::AnimSetForTests = nullptr;
 	R->Runline().SpawnAt({0.0f, 0.0f, 0.0f}, 0.0f);
 	R->Runline().PressCrouch();
 	R->Runline().SetCrouchHeld(true);
@@ -185,15 +185,41 @@ bool FRunlineRunnerBody::RunTest(const FString&)
 	return true;
 }
 
-// Review Focus 1: no clips, no anim set: the body keeps ABP_Unarmed (a fresh clone).
+namespace
+{
+	/// Counts log lines containing Needle while alive.
+	struct FLogCatcher : FOutputDevice
+	{
+		FString Needle;
+		int32 Count = 0;
+		explicit FLogCatcher(const TCHAR* InNeedle) : Needle(InNeedle) { GLog->AddOutputDevice(this); }
+		virtual ~FLogCatcher() override { GLog->RemoveOutputDevice(this); }
+		virtual void Serialize(const TCHAR* V, ELogVerbosity::Type, const FName&) override
+		{
+			if (FCString::Strifind(V, *Needle)) ++Count;
+		}
+	};
+}
+
+// Review Focus 1 (and final review Important 2): a fresh clone has the committed anim set, whose
+// clips aren't there: the body keeps ABP_Unarmed, quietly (no load warnings).
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineRunnerFallback, "Runline.Body.FallsBackWithoutClips",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FRunlineRunnerFallback::RunTest(const FString&)
 {
 	FRunlineTestWorld TW;
-	ARunlineRunner::bIgnoreAnimSetForTests = true;
+	URunlineAnimSet* Clone = NewObject<URunlineAnimSet>();
+	Clone->Slots.SetNum(int32(ERunlineAnimSlot::Count));
+	for (int32 I = 0; I < Clone->Slots.Num(); ++I)
+	{
+		const FString Name = FString::Printf(TEXT("A_%s"), RunlineAnimSlotName(ERunlineAnimSlot(I)));
+		Clone->Slots[I].Clip = TSoftObjectPtr<UAnimSequence>(FSoftObjectPath(FString::Printf(TEXT("/Game/ThirdParty/NotImported/%s.%s"), *Name, *Name)));
+	}
+	FLogCatcher Warnings(TEXT("NotImported"));
+	ARunlineRunner::AnimSetForTests = Clone;
 	ARunlineRunner* R = TW.World->SpawnActor<ARunlineRunner>();
-	ARunlineRunner::bIgnoreAnimSetForTests = false;
+	ARunlineRunner::AnimSetForTests = nullptr;
+	TestEqual(TEXT("no load warnings about the missing clips"), Warnings.Count, 0);
 	TestTrue(TEXT("ABP_Unarmed"), R->GetMesh()->GetAnimClass() && R->GetMesh()->GetAnimClass()->GetName().Contains(TEXT("ABP_Unarmed")));
 	return true;
 }

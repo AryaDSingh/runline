@@ -77,6 +77,9 @@ public:
 	float GetStepAlpha() const { return Accumulator / StepSeconds; }
 	/// How many times the view has been cut (spawn, respawn, death): a change means don't blend.
 	int32 GetSnapCount() const { return SnapCount; }
+	/// Game seconds the core ran in the last Advance (a hitch's dropped time excluded): the body's
+	/// clips advance by this, so they can't run ahead of her.
+	float GetFrameSeconds() const { return FrameSeconds; }
 	/// Dev only (?poses=1): no steps run; the next frame's events are DevEvents instead.
 	bool bFrozen = false;
 	TArray<runline::Event> DevEvents;
@@ -110,6 +113,7 @@ private:
 	int32 NotPorted = 0;
 	TArray<runline::Event> FrameEvents;
 	int32 SnapCount = 0;
+	float FrameSeconds = 0.0f;
 	TSet<FString> NotPortedSeen;
 	// The view at the start of the last step, with the look that step took: the render view
 	// moves from here to the stepped view, so look is never delayed and core turns are smooth.

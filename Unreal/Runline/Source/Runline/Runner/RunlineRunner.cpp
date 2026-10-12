@@ -80,7 +80,7 @@ ARunlineRunner::ARunlineRunner(const FObjectInitializer& OI)
 	LegsMesh->SetCollisionProfileName(FName("NoCollision"));
 }
 
-bool ARunlineRunner::bIgnoreAnimSetForTests = false;
+TObjectPtr<URunlineAnimSet> ARunlineRunner::AnimSetForTests = nullptr;
 
 void ARunlineRunner::PostInitializeComponents()
 {
@@ -89,8 +89,8 @@ void ARunlineRunner::PostInitializeComponents()
 	LegsMesh->HideBoneByName(TEXT("spine_02"), PBO_None);
 	// The GASP body when its clips are imported (scripts/import-gasp.ps1); a fresh clone keeps
 	// ABP_Unarmed.
-	const URunlineAnimSet* Set = bIgnoreAnimSetForTests ? nullptr : URunlineAnimSet::Get();
-	const auto Loads = [Set](ERunlineAnimSlot Slot) { return Set && Set->Slots.IsValidIndex(int32(Slot)) && !Set->Slots[int32(Slot)].Clip.IsNull() && Set->Slots[int32(Slot)].Clip.LoadSynchronous(); };
+	const URunlineAnimSet* Set = AnimSetForTests ? AnimSetForTests.Get() : URunlineAnimSet::Get();
+	const auto Loads = [Set](ERunlineAnimSlot Slot) { return Set && Set->Slots.IsValidIndex(int32(Slot)) && RunlineLoadClip(Set->Slots[int32(Slot)].Clip); };
 	if (Loads(ERunlineAnimSlot::Idle) && Loads(ERunlineAnimSlot::Run)) GetMesh()->SetAnimInstanceClass(URunlineBodyAnimInstance::StaticClass());
 }
 
@@ -126,7 +126,7 @@ void ARunlineRunner::Tick(float DeltaSeconds)
 	UpdateBodyPlacement();
 	if (URunlineBodyAnimInstance* Body = Cast<URunlineBodyAnimInstance>(GetMesh()->GetAnimInstance()))
 	{
-		Body->SetInput(FRunlineBodyInput::From(M, DeltaSeconds * M.GameSpeed));   // game seconds, like the core
+		Body->SetInput(FRunlineBodyInput::From(M, M.GetFrameSeconds()));   // the game seconds the core ran
 		FirstPersonMesh->SetVisibility(!Body->GetPose().bHideArms);
 	}
 	if (AController* C = GetController()) C->SetControlRotation(M.GetRenderRotation());

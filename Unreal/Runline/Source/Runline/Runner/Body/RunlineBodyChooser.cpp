@@ -15,6 +15,8 @@ namespace
 	constexpr float SlideIntoTime = 0.25f;
 	/// An overlay fades out over the last part of its window.
 	constexpr float OverlayFadeFrom = 0.7f;
+	/// An overlay fades in over this; cut short (she leaves the ground), it fades out over this.
+	constexpr float OverlayFadeIn = 0.06f, OverlayCutFade = 0.15f;
 
 	float Frac(float Num, float Den) { return Den > 0.0f ? FMath::Clamp(Num / Den, 0.0f, 1.0f) : 1.0f; }
 	S BySpeed(float Speed, S Stand, S Run, S Sprint) { return Speed < StandBelow ? Stand : Speed < RunBelow ? Run : Sprint; }
@@ -43,6 +45,8 @@ void FRunlineBodyChooser::Reset()
 	Main = FMain{};
 	Fading.Reset();
 	Overlay.Reset();
+	OverlayWeight = 0.0f;
+	bOverlayCut = false;
 	AirStart.Reset();
 	FallTime = 0.0f;
 	LocoPhase = 0.0f;
@@ -228,7 +232,7 @@ FRunlineBodyPose FRunlineBodyChooser::Choose(const FRunlineBodyInput& In)
 			const bool bHeavy = E.impact > HeavyImpact;
 			const S Slot = BySpeed(Speed, bHeavy ? S::LandStandHeavy : S::LandStandLight, bHeavy ? S::LandRunHeavy : S::LandRunLight,
 				bHeavy ? S::LandSprintHeavy : S::LandSprintLight);
-			if (Has(Slot)) Overlay = FOverlay{Slot, 0.0f};
+			if (Has(Slot)) { Overlay = FOverlay{Slot, 0.0f}; OverlayWeight = 0.0f; bOverlayCut = false; }
 			break;
 		}
 		default: break;
@@ -236,7 +240,7 @@ FRunlineBodyPose FRunlineBodyChooser::Choose(const FRunlineBodyInput& In)
 	}
 	// Leaving a slide for the ground: the slide's way out, as an overlay.
 	const bool bSliding = std::holds_alternative<runline::Slide>(In.State);
-	if (bWasSliding && !bSliding && bGround && Has(S::SlideOut)) Overlay = FOverlay{S::SlideOut, 0.0f};
+	if (bWasSliding && !bSliding && bGround && Has(S::SlideOut)) { Overlay = FOverlay{S::SlideOut, 0.0f}; OverlayWeight = 0.0f; bOverlayCut = false; }
 	bWasSliding = bSliding;
 
 	if (bAir)
@@ -270,23 +274,35 @@ FRunlineBodyPose FRunlineBodyChooser::Choose(const FRunlineBodyInput& In)
 	Fading.RemoveAll([](const FMain& F) { return F.Weight <= 0.0f; });
 
 	// The overlay (Ground and SoftLand only): full weight, fading over the end of its window.
-	float OverlayWeight = 0.0f;
-	if (Overlay && !bGround) Overlay.Reset();
+	// (Leaving the ground cuts it short: it fades out where it is, never pops.)
+	if (Overlay && !bGround) bOverlayCut = true;
 	if (Overlay)
 	{
 		const FRunlineClipInfo I = Info(Overlay->Slot);
 		const float Span = I.End() - I.Start();
 		const float U = Frac(Overlay->T, Span);
-		OverlayWeight = U < OverlayFadeFrom ? 1.0f : 1.0f - Frac(U - OverlayFadeFrom, 1.0f - OverlayFadeFrom);
-		if (U >= 1.0f) { Overlay.Reset(); OverlayWeight = 0.0f; }
+		if (bOverlayCut) OverlayWeight -= OverlayCutFade > 0.0f ? In.Dt / OverlayCutFade : 1.0f;
+		else
+		{
+			const float WindowFade = U < OverlayFadeFrom ? 1.0f : 1.0f - Frac(U - OverlayFadeFrom, 1.0f - OverlayFadeFrom);
+			OverlayWeight = FMath::Min(FMath::Min(1.0f, OverlayWeight + (OverlayFadeIn > 0.0f ? In.Dt / OverlayFadeIn : 1.0f)), WindowFade);
+		}
+		if (OverlayWeight <= 0.0f && (bOverlayCut || U >= 1.0f))
+		{
+			Overlay.Reset();
+			OverlayWeight = 0.0f;
+			bOverlayCut = false;
+		}
 	}
+	OverlayWeight = FMath::Clamp(OverlayWeight, 0.0f, 1.0f);
+	if (!Overlay) OverlayWeight = 0.0f;
 
 	FRunlineBodyPose Out;
 	const float Under = 1.0f - OverlayWeight;
 	for (const FMain& F : Fading) AddLayers(F, Under, Out);
 	AddLayers(Main, Under, Out);
 	if (Overlay && OverlayWeight > 0.0f) Out.Layers.Add({Overlay->Slot, Info(Overlay->Slot).Start() + Overlay->T, OverlayWeight});
-	if (Overlay) Overlay->T += In.Dt;
+	if (Overlay && !bOverlayCut) Overlay->T += In.Dt;
 	float Total = 0.0f;
 	for (const FRunlineBodyLayer& L : Out.Layers) Total += L.Weight;
 	if (Total > 0.0f)

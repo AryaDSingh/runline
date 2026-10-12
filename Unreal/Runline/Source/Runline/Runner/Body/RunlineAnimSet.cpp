@@ -1,4 +1,6 @@
 #include "RunlineAnimSet.h"
+#include "Animation/AnimSequence.h"
+#include "Misc/PackageName.h"
 
 const TCHAR* RunlineAnimSlotName(ERunlineAnimSlot Slot)
 {
@@ -21,4 +23,12 @@ bool RunlineAnimSlotFromName(const FString& Name, ERunlineAnimSlot& Out)
 URunlineAnimSet* URunlineAnimSet::Get()
 {
 	return LoadObject<URunlineAnimSet>(nullptr, TEXT("/Game/Runline/Animation/DA_RunlineAnimSet.DA_RunlineAnimSet"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+}
+
+UAnimSequence* RunlineLoadClip(const TSoftObjectPtr<UAnimSequence>& Clip)
+{
+	if (Clip.IsNull()) return nullptr;
+	if (UAnimSequence* Loaded = Clip.Get()) return Loaded;
+	if (!FPackageName::DoesPackageExist(Clip.ToSoftObjectPath().GetLongPackageName())) return nullptr;
+	return Clip.LoadSynchronous();
 }

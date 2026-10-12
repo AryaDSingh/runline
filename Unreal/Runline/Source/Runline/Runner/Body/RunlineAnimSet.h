@@ -51,3 +51,6 @@ public:
 	/// /Game/Runline/Animation/DA_RunlineAnimSet, or null.
 	static URunlineAnimSet* Get();
 };
+
+/// A slot's clip, or null when it isn't imported (a fresh clone): checked first, so no load warning.
+RUNLINE_API UAnimSequence* RunlineLoadClip(const TSoftObjectPtr<UAnimSequence>& Clip);

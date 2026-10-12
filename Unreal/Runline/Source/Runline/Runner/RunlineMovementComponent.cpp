@@ -187,15 +187,18 @@ void URunlineMovementComponent::Advance(float DeltaSeconds)
 	FrameEvents.Reset();
 	if (bFrozen)
 	{
+		FrameSeconds = DeltaSeconds * GameSpeed;
 		FrameEvents = MoveTemp(DevEvents);
 		DevEvents.Reset();
 		return;
 	}
 	Accumulator += DeltaSeconds * GameSpeed;
+	FrameSeconds = DeltaSeconds * GameSpeed;
 	int32 N = FMath::FloorToInt(Accumulator / StepSeconds);
 	if (N > MaxStepsPerFrame)
 	{
 		N = MaxStepsPerFrame;
+		FrameSeconds -= Accumulator - N * StepSeconds;   // the dropped part never happened for her
 		Accumulator = N * StepSeconds;   // drop the rest of the hitch
 	}
 	for (int32 I = 0; I < N; ++I)

@@ -524,4 +524,19 @@ bool FRunlineMovementArmsFeed::RunTest(const FString&)
 	return true;
 }
 
+
+// Final review Important 3: the game seconds the core actually ran this frame (a hitch past
+// MaxStepsPerFrame is dropped by the core, so the body's clips must drop it too).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineMovementFrameSeconds, "Runline.Movement.FrameSecondsFollowTheCore",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineMovementFrameSeconds::RunTest(const FString&)
+{
+	FRunnerWorld W;
+	W.M().Advance(Step * 0.5f);
+	TestEqual(TEXT("a short frame: all of it"), W.M().GetFrameSeconds(), Step * 0.5f, 1e-6f);
+	W.M().Advance(0.5f);   // a hitch: the core runs MaxStepsPerFrame steps and drops the rest
+	TestEqual(TEXT("a hitch: what the core ran"), W.M().GetFrameSeconds(), Step * (URunlineMovementComponent::MaxStepsPerFrame - 0.5f), 1e-5f);
+	return true;
+}
+
 #endif

@@ -12,6 +12,8 @@ $Out = Join-Path $Root 'build\gasp-fbx'
 $Script = (Join-Path $Root 'tools\gasp\export_clips.py').Replace('\', '/')
 $GaspProject = Get-ChildItem $Gasp -Filter *.uproject | Select-Object -First 1
 if (-not $GaspProject) { throw "No GASP project in $Gasp" }
+# The logs below go to build/ (a fresh clone has none yet).
+New-Item -ItemType Directory -Force (Join-Path $Root 'build') | Out-Null
 $env:RUNLINE_GASP_LIST = $List
 $env:RUNLINE_GASP_OUT = $Out
 & $Cmd $GaspProject.FullName -run=pythonscript "-script=$Script" -EnablePlugins=PythonScriptPlugin -unattended -nop4 -nosplash -stdout | Tee-Object (Join-Path $Root 'build\gasp-export.log') | Select-String 'Runline GASP|Error'

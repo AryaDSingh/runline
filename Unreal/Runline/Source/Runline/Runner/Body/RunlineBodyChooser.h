@@ -110,6 +110,9 @@ private:
 	FMain Main;
 	TArray<FMain, TInlineAllocator<4>> Fading;
 	TOptional<FOverlay> Overlay;
+	/// The overlay's weight now (it fades in, and fades out when cut short).
+	float OverlayWeight = 0.0f;
+	bool bOverlayCut = false;
 	TOptional<FOverlay> AirStart;
 	float FallTime = 0.0f;
 	float LocoPhase = 0.0f;

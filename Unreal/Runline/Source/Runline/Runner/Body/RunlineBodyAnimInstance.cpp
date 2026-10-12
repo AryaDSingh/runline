@@ -22,7 +22,7 @@ void URunlineBodyAnimInstance::LoadClips()
 		for (int32 I = 0; I < FMath::Min(Count, Set->Slots.Num()); ++I)
 		{
 			const FRunlineAnimSlotDef& Def = Set->Slots[I];
-			UAnimSequence* Seq = Def.Clip.IsNull() ? nullptr : Def.Clip.LoadSynchronous();
+			UAnimSequence* Seq = RunlineLoadClip(Def.Clip);
 			Sequences[I] = Seq;
 			FRunlineClipInfo& Info = Infos[I];
 			Info.Length = Seq ? Seq->GetPlayLength() : 0.0f;

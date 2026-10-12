@@ -98,16 +98,19 @@ bool FRunlineBodyLandings::RunTest(const FString&)
 	Settle(C, In(runline::Ground{}, 6.5f));
 	FRunlineBodyInput I = In(runline::Ground{}, 6.5f);
 	I.Events = {Land(9.0f)};
-	const FRunlineBodyPose P = C.Choose(I);
-	TestTrue(TEXT("sprint, heavy"), Layer(P, ERunlineAnimSlot::LandSprintHeavy).Weight > 0.99f);
+	C.Choose(I);
 	I.Events.Reset();
+	const FRunlineBodyPose P = Settle(C, I, 6);   // past the overlay's fade-in
+	TestTrue(TEXT("sprint, heavy"), Layer(P, ERunlineAnimSlot::LandSprintHeavy).Weight > 0.99f);
 	const FRunlineBodyPose After = Settle(C, I, 70);
 	TestEqual(TEXT("faded out after its length"), Layer(After, ERunlineAnimSlot::LandSprintHeavy).Weight, 0.0f, 1e-4f);
 	FRunlineBodyChooser D = Chooser();
 	Settle(D, In(runline::Ground{}, 0.5f));
 	FRunlineBodyInput J = In(runline::Ground{}, 0.5f);
 	J.Events = {Land(3.0f)};
-	TestTrue(TEXT("standing, light"), Layer(D.Choose(J), ERunlineAnimSlot::LandStandLight).Weight > 0.99f);
+	D.Choose(J);
+	J.Events.Reset();
+	TestTrue(TEXT("standing, light"), Layer(Settle(D, J, 6), ERunlineAnimSlot::LandStandLight).Weight > 0.99f);
 	return true;
 }
 
@@ -177,6 +180,35 @@ bool FRunlineBodyStandIns::RunTest(const FString&)
 	TestEqual(TEXT("leaning 20 degrees, away from the wall (left)"), Run.LeanDegrees, -20.0f, 1e-3f);
 	TestTrue(TEXT("slide: into first"), Layer(Settle(C, In(runline::Slide{0.1f})), ERunlineAnimSlot::SlideInto).Weight > 0.99f);
 	TestTrue(TEXT("then the loop"), Layer(Settle(C, In(runline::Slide{0.6f})), ERunlineAnimSlot::SlideLoop).Weight > 0.99f);
+	return true;
+}
+
+
+// Final review Important 1: a landing overlay fades in, and a jump out of it fades it out (it used to
+// appear and vanish in one frame: a pop she sees in first person on every land-and-jump).
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRunlineBodyOverlayFades, "Runline.Body.OverlaysFadeInAndOut",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRunlineBodyOverlayFades::RunTest(const FString&)
+{
+	FRunlineBodyChooser C = Chooser();
+	Settle(C, In(runline::Ground{}, 4.0f));
+	FRunlineBodyInput I = In(runline::Ground{}, 4.0f);
+	I.Events = {Land(3.0f)};
+	const float First = Layer(C.Choose(I), ERunlineAnimSlot::LandRunLight).Weight;
+	TestTrue(TEXT("fading in, not at full weight on the first frame"), First > 0.0f && First < 0.5f);
+	I.Events.Reset();
+	float Prev = Layer(Settle(C, I, 6), ERunlineAnimSlot::LandRunLight).Weight;
+	TestTrue(TEXT("full after the fade-in"), Prev > 0.99f);
+	FRunlineBodyInput Jump = In(runline::Air{}, 4.0f);
+	Jump.Events = {runline::Event{runline::EventKind::Jump}};
+	for (int32 K = 0; K < 15; ++K)
+	{
+		const float W = Layer(C.Choose(Jump), ERunlineAnimSlot::LandRunLight).Weight;
+		Jump.Events.Reset();
+		TestTrue(*FString::Printf(TEXT("frame %d: fades out (%.3f -> %.3f)"), K, Prev, W), Prev - W <= 0.12f);
+		Prev = W;
+	}
+	TestEqual(TEXT("gone after 0.25 s"), Prev, 0.0f, 1e-4f);
 	return true;
 }
 
