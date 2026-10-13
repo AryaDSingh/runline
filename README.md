@@ -45,11 +45,3 @@ tools/                golden-data and trace tools (run against the Rust referenc
 scripts/              build, test, bake and import scripts
 docs/                 design specs and implementation plans
 ```
-
-## Credits
-
-The movement system is ported from **faith-runner** by tnrjns, used and adapted with the author's
-permission. faith-runner's rules and values are in turn derived from *Mirror's Edge* (DICE / EA), which is
-the design reference; the source comments keep that provenance. No game files are included, and this
-project is not affiliated with or endorsed by EA or DICE. Full credits, including the Unreal template and
-asset licenses: [CREDITS.md](CREDITS.md).
