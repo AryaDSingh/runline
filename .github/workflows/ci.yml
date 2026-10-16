@@ -27,4 +27,5 @@ jobs:
       - name: Install Ninja
         run: sudo apt-get update && sudo apt-get install -y ninja-build
       - name: Test RunlineCore (all but the exact Windows-reference replay)
-        run: bash scripts/test.sh --test-case-exclude="replay: every committed trace matches faith_move frame by frame"
+        run: |
+          bash scripts/test.sh --test-case-exclude="replay: every committed trace matches faith_move frame by frame"
