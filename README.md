@@ -1,5 +1,7 @@
 # Runline
 
+[![CI](https://github.com/AryaDSingh/runline/actions/workflows/ci.yml/badge.svg)](https://github.com/AryaDSingh/runline/actions/workflows/ci.yml)
+
 First-person parkour movement in Unreal Engine 5.8: a C++ movement core, verified bit-exact against its
 reference implementation, with a playable rooftop course and time trial.
 
@@ -32,6 +34,11 @@ powershell -ExecutionPolicy Bypass -File scripts/test.ps1          # core tests 
 powershell -ExecutionPolicy Bypass -File scripts/test-unreal.ps1   # builds the editor target, runs the Unreal tests
 & 'D:\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe' "$PWD\Unreal\Runline\Runline.uproject" -game -windowed -ResX=1600 -ResY=900
 ```
+
+The core alone builds anywhere with CMake and a C++20 compiler: `bash scripts/test.sh` on Linux or macOS.
+CI runs the core's tests on every push. Exact trace parity is checked on Windows, where the reference traces
+were recorded: other platforms' maths libraries round `sin`, `cos` and `exp` differently in the last bit, so
+Linux runs every test but that replay.
 
 Controls: WASD to move, Space to jump, Shift/C/Ctrl to crouch, slide and roll, Q to turn 180, R to respawn,
 1-9 for checkpoints, Esc for the menu.
