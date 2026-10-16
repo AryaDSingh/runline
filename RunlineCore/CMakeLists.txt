@@ -20,6 +20,11 @@ FetchContent_MakeAvailable(doctest)
 add_executable(RunlineCoreTests
   tests/test_main.cpp tests/vec3_tests.cpp tests/world_tests.cpp tests/golden_tests.cpp tests/move_tests.cpp tests/probes_tests.cpp tests/mesh_world_tests.cpp tests/source_tests.cpp tests/trace_tests.cpp tests/locomotion_tests.cpp tests/tuning_tests.cpp tests/controller_tests.cpp tests/replay_tests.cpp tests/look_tests.cpp tests/camera_tests.cpp)
 target_link_libraries(RunlineCoreTests PRIVATE RunlineCore doctest::doctest)
+# The body chooser (M3b) is Unreal-side code in plain C++: its tests run here, on every platform.
+set(RUNLINE_BODY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../Unreal/Runline/Source/Runline/Runner/Body")
+target_sources(RunlineCoreTests PRIVATE tests/body_chooser_tests.cpp "${RUNLINE_BODY_DIR}/RunlineBodyChooser.cpp")
+target_include_directories(RunlineCoreTests PRIVATE "${RUNLINE_BODY_DIR}")
+target_compile_definitions(RunlineCoreTests PRIVATE RUNLINE_STANDALONE)
 target_compile_definitions(RunlineCoreTests PRIVATE
   RUNLINE_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden"
   RUNLINE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")

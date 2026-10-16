@@ -554,6 +554,19 @@ git commit -m "M3b: every GASP clip the body uses, and the anim set"
 
 ### Task 4: The chooser: which clips, where in them, how much
 
+> **Done ahead of Tasks 1-3 (2026-10-16, in a cloud session without Unreal), with these changes:**
+> - The chooser is plain C++ (std::vector, std::function, no UE_LOG), so it builds and is tested
+>   outside Unreal: its doctest cases (`RunlineCore/tests/body_chooser_tests.cpp`, the seven below
+>   plus a jump, a slide-out and getting up) join `RunlineCoreTests` and run in CI on Windows and Linux.
+>   The Unreal automation versions below are not needed.
+> - `ERunlineAnimSlot` lives in its own plain header, `Body/RunlineAnimSlot.h`; Task 3's
+>   `RunlineAnimSet.h` includes it rather than declaring it.
+> - Logging is a hook: set `OnMissingClip` to a `UE_LOG(Warning)` where the chooser is made (Task 5).
+>   `Warnings()` still counts once per slot.
+> - `FRunlineBodyInput` has no `WallNormal` (the WallRun state carries its normal) and no `From()`:
+>   filling it from the movement component goes in Task 5, next to the anim instance.
+> - `Events` is a `std::vector<runline::Event>`; `FRunlineBodyPose::Layers` a `std::vector`.
+
 **Files:**
 - Create: `Unreal/Runline/Source/Runline/Runner/Body/RunlineBodyChooser.h/.cpp`
 - Test: `Unreal/Runline/Source/Runline/Tests/BodyChooserTests.cpp` (create)
