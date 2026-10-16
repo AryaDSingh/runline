@@ -1,0 +1,25 @@
+# Builds RunlineCore and runs its doctest suite, golden and trace parity included.
+# Windows (MSVC, /fp:strict) is the platform the reference traces were recorded on.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  core-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test RunlineCore
+        run: powershell -ExecutionPolicy Bypass -File scripts/test.ps1
+
+  core-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Test RunlineCore
+        run: bash scripts/test.sh
