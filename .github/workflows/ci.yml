@@ -1,0 +1,31 @@
+# Builds RunlineCore and runs its doctest suite on every push.
+#
+# Windows is the reference platform: faith-runner's traces were recorded there,
+# and the core must replay all of them bit for bit (MSVC, /fp:strict). Linux runs
+# every other test. It skips only the exact replay, because glibc's sinf, cosf and
+# expf round differently from the Windows C runtime in the last bit: measured,
+# 141 of 177 traces drift in the camera effects and 1 in movement there.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  core-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test RunlineCore
+        run: powershell -ExecutionPolicy Bypass -File scripts/test.ps1
+
+  core-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Test RunlineCore (all but the exact Windows-reference replay)
+        run: |
+          bash scripts/test.sh --test-case-exclude="replay: every committed trace matches faith_move frame by frame"

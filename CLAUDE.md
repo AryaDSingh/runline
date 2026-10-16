@@ -5,6 +5,9 @@ Spec: docs/superpowers/specs/2026-10-09-faith-movement-port-design.md
 
 ## Build and test
 - `powershell -ExecutionPolicy Bypass -File scripts/test.ps1`: configures, builds and runs all RunlineCore tests (no Unreal needed).
+  `bash scripts/test.sh` does the same on Linux/macOS (extra arguments go to doctest). Exact trace replay holds
+  only on Windows, the platform the reference was recorded on: glibc's sinf/cosf/expf differ in the last bit,
+  so CI (.github/workflows/ci.yml) runs it on Windows and every other test on Linux.
 - `powershell -ExecutionPolicy Bypass -File scripts/test-unreal.ps1 [-Filter Runline.World]`: builds the
   RunlineEditor target (UE at D:\UE_5.8, or $env:UE_ROOT) and runs the Runline.* automation tests headless;
   the log is build/unreal-tests.log.
